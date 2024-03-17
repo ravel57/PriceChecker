@@ -1,1 +1,6 @@
-rootProject.name = 'priceChecker'
+rootProject.name = 'PriceChecker'
+
+includeBuild 'EurekaServer'
+includeBuild 'ApiGateway'
+includeBuild 'WebParser'
+includeBuild 'EurekaClient'
