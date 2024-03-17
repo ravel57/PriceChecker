@@ -24,7 +24,7 @@ class WebParser {
 	}
 
 
-	@Throws(IOException::class)
+	@Throws(NullPointerException::class)
 	private fun getByJSoup(url: String, price: String, searchName: String): ParsedProduct {
 		return try {
 			val document = Jsoup.connect(url).followRedirects(true).timeout(60000).get()
@@ -49,7 +49,7 @@ class WebParser {
 			val host = URI(document.location()).host
 			ParsedProduct(name = names.distinct(), price = prices.distinct(), shopUrl = host)
 		} catch (e: IOException) {
-			logger.error("parsing exception")
+			logger.error("parsing exception: ${e.message}")
 			throw NullPointerException()
 		}
 	}
