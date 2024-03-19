@@ -1,0 +1,69 @@
+import org.jetbrains.kotlin.gradle.tasks.KotlinCompile
+
+plugins {
+//    id 'war'
+	id 'org.springframework.boot' version '3.2.3'
+	id 'io.spring.dependency-management' version '1.1.4'
+	id 'org.jetbrains.kotlin.jvm' version '1.9.22'
+	id 'org.jetbrains.kotlin.plugin.spring' version '1.9.22'
+}
+
+group = 'ru.ravel'
+version = '0.0.1-SNAPSHOT'
+
+java {
+	sourceCompatibility = '17'
+}
+
+repositories {
+	mavenCentral()
+}
+
+ext {
+	set('springCloudVersion', "2023.0.0")
+}
+
+dependencies {
+	implementation 'org.apache.groovy:groovy:4.0.20'
+	runtimeOnly 'org.jetbrains.kotlin:kotlin-reflect:1.9.23'
+
+
+	implementation 'org.springframework.cloud:spring-cloud-starter-netflix-eureka-client'
+	implementation 'org.springframework.cloud:spring-cloud-starter-config:4.1.0'
+	implementation 'org.springframework.cloud:spring-cloud-starter-bootstrap:4.1.1'
+
+	implementation 'org.springframework.boot:spring-boot-starter-web:3.2.3'
+//  providedRuntime 'org.springframework.boot:spring-boot-starter-tomcat:3.2.3'
+	implementation 'org.springframework.boot:spring-boot-starter-data-jdbc:3.2.3'
+	implementation 'org.springframework.boot:spring-boot-starter-jdbc:3.2.3'
+	implementation 'org.postgresql:postgresql:42.7.3'
+
+//	implementation 'com.sun.jersey.contribs:jersey-apache-client4:1.19.4'
+//  implementation 'org.springframework.boot:spring-boot-starter-security:3.2.3'
+//  implementation 'org.springframework.boot:spring-boot-starter-webflux:3.2.3'
+//  developmentOnly 'org.springframework.boot:spring-boot-docker-compose:3.2.3'
+//  annotationProcessor 'org.projectlombok:lombok'
+//	implementation 'org.telegram:telegrambots:6.4.0'
+	implementation 'org.jsoup:jsoup:1.17.2'
+
+	testImplementation 'org.springframework.boot:spring-boot-starter-test'
+//  testImplementation 'io.projectreactor:reactor-test'
+//  testImplementation 'org.springframework.security:spring-security-test'
+}
+
+dependencyManagement {
+	imports {
+		mavenBom "org.springframework.cloud:spring-cloud-dependencies:${springCloudVersion}"
+	}
+}
+
+tasks.withType(KotlinCompile) {
+	kotlinOptions {
+		freeCompilerArgs += '-Xjsr305=strict'
+		jvmTarget = '17'
+	}
+}
+
+tasks.named('test') {
+	useJUnitPlatform()
+}

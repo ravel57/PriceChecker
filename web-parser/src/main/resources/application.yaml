@@ -1,0 +1,33 @@
+spring:
+  application:
+    name: web-parser
+  datasource:
+    url: jdbc:postgresql://localhost:5432/price_checker
+    username: postgres
+    password: postgres
+    driver-class-name: org.postgresql.Driver
+  jpa:
+    generate-ddl: true
+    database: postgresql
+    database-platform: org.hibernate.dialect.PostgreSQLDialect
+    properties:
+      hibernate:
+        format_sql: true
+  session:
+    jdbc:
+      initialize-schema: never
+
+
+logging:
+  level:
+    org.hibernate.SQL: trace
+    org.hibernate.type: trace
+    org.hibernate.type.descriptor.sql.BasicBinder: trace
+
+eureka:
+  client:
+    service-url:
+      defaultZone: http://localhost:8761/eureka
+
+server:
+  port: 0

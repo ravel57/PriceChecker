@@ -1,0 +1,23 @@
+spring:
+  datasource:
+    url: jdbc:postgresql://localhost:5432/price_checker?currentSchema=telegram_service
+    username: postgres
+    password: postgres
+  jpa:
+    generate-ddl: true
+    properties:
+      hibernate:
+        format_sql: true
+  session:
+    jdbc:
+      initialize-schema: never
+
+logging:
+  level:
+    org.hibernate.SQL: trace
+    org.hibernate.type: trace
+    org.hibernate.type.descriptor.sql.BasicBinder: trace
+
+eureka.client.service-url.defaultZone: http://localhost:8761/eureka
+
+server.port: 0
