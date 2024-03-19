@@ -1,14 +1,7 @@
 package ru.ravel.telegramservice
 
-import com.pengrad.telegrambot.Callback
-import com.pengrad.telegrambot.ExceptionHandler
-import com.pengrad.telegrambot.TelegramBot
-import com.pengrad.telegrambot.TelegramException
-import com.pengrad.telegrambot.UpdatesListener
-import com.pengrad.telegrambot.model.Message
+import com.pengrad.telegrambot.*
 import com.pengrad.telegrambot.model.Update
-import com.pengrad.telegrambot.model.request.ChatAction
-import com.pengrad.telegrambot.model.request.ForceReply
 import com.pengrad.telegrambot.model.request.ParseMode
 import com.pengrad.telegrambot.model.request.ReplyKeyboardMarkup
 import com.pengrad.telegrambot.request.SendMessage
@@ -20,16 +13,22 @@ class TelegramService {
 
 	TelegramBot bot = new TelegramBot(System.getenv("bot_token"))
 
-	UpdatesListener listener = updates -> {
-		return UpdatesListener.CONFIRMED_UPDATES_ALL
+	UpdatesListener listener = new UpdatesListener() {
+		@Override
+		int process(List<Update> updates) {
+			return UpdatesListener.CONFIRMED_UPDATES_ALL
+		}
 	}
 
-	ExceptionHandler exceptionHandler = e -> {
-		if (e.response() != null) {
-			e.response().errorCode()
-			e.response().description()
-		} else {
-			e.printStackTrace()
+	ExceptionHandler exceptionHandler = new ExceptionHandler() {
+		@Override
+		void onException(TelegramException e) {
+			if (e.response() != null) {
+				e.response().errorCode()
+				e.response().description()
+			} else {
+				e.printStackTrace()
+			}
 		}
 	}
 
@@ -48,11 +47,14 @@ class TelegramService {
 	TelegramService() {
 		bot.setUpdatesListener(listener, exceptionHandler)
 		SendMessage request = new SendMessage(315538424, "text")
-				.parseMode(ParseMode.HTML)
-				.disableWebPagePreview(true)
-				.disableNotification(true)
-				.replyToMessageId(1)
-				.replyMarkup(new ReplyKeyboardMarkup(['a', 'b'] as String[], ['c', 'd'] as String[]))
+			.parseMode(ParseMode.HTML)
+			.disableWebPagePreview(true)
+			.disableNotification(true)
+//			.replyToMessageId(1)
+			.replyMarkup(new ReplyKeyboardMarkup(
+				['a', 'b'] as String[],
+				['c', 'd'] as String[])
+			)
 //		bot.execute(request, callback)
 	}
 
