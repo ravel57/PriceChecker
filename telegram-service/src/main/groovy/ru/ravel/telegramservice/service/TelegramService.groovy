@@ -9,8 +9,8 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
-import ru.ravel.telegramservice.dto.User
-import ru.ravel.telegramservice.repository.TelegramRepository
+import ru.ravel.telegramservice.dto.TelegramUser
+import ru.ravel.telegramservice.repository.TelegramUserRepository
 
 @Service
 class TelegramService {
@@ -20,7 +20,7 @@ class TelegramService {
 	private TelegramBot bot = new TelegramBot(System.getenv("bot_token"))
 
 	@Autowired
-	private TelegramRepository repository
+	private TelegramUserRepository repository
 
 	TelegramService() {
 		bot.setUpdatesListener(listener, exceptionHandler)
@@ -33,14 +33,14 @@ class TelegramService {
 			updates.each {
 				Long telegramId = it.message().from().id()
 				String username = it.message().from().username()
-				User user = repository.getByTelegramId(telegramId)
+				TelegramUser user = repository.getByTelegramId(telegramId)
 				if (user != null) {
 					user
 				} else {
-					repository.save(new User(telegramId, username))
+					repository.save(new TelegramUser(telegramId, username))
 				}
 			}
-			return UpdatesListener.CONFIRMED_UPDATES_ALL;
+			return UpdatesListener.CONFIRMED_UPDATES_ALL
 		}
 	}
 

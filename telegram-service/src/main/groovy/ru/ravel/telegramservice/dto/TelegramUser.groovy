@@ -9,7 +9,7 @@ import jakarta.persistence.Table
 
 @Entity
 @Table(name = "user", schema = "telegram_service")
-class User {
+class TelegramUser {
 
 	@Id
 	@GeneratedValue(strategy= GenerationType.IDENTITY)
@@ -20,11 +20,15 @@ class User {
 
 	String username
 
-	User() {
+	@Column(name = "current_state")
+	State currentState
+
+	TelegramUser() {
 	}
 
-	User(Long telegramId, String username) {
+	TelegramUser(Long telegramId, String username) {
 		this.telegramId = telegramId
 		this.username = username
+		this.currentState = State.NONE
 	}
 }
