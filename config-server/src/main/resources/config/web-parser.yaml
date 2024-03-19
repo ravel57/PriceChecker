@@ -1,22 +1,16 @@
 spring:
-  application:
-    name: web-parser
   datasource:
-    url: jdbc:postgresql://localhost:5432/price_checker
+    url: jdbc:postgresql://localhost:5432/price_checker?currentSchema=telegram_service
     username: postgres
     password: postgres
-    driver-class-name: org.postgresql.Driver
   jpa:
     generate-ddl: true
-    database: postgresql
-    database-platform: org.hibernate.dialect.PostgreSQLDialect
     properties:
       hibernate:
         format_sql: true
   session:
     jdbc:
       initialize-schema: never
-
 
 logging:
   level:

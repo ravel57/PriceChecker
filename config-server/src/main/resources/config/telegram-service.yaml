@@ -8,6 +8,8 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        hbm2ddl:
+          create_namespaces: true
   session:
     jdbc:
       initialize-schema: never
