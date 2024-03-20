@@ -5,7 +5,6 @@ import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.model.request.ParseMode
-import com.pengrad.telegrambot.model.request.ReplyKeyboardRemove
 import com.pengrad.telegrambot.request.EditMessageText
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.response.SendResponse
@@ -60,7 +59,7 @@ class TelegramService {
 							}
 						}
 					} else {
-						sendMessage(StateWorker(telegramId, message))
+						sendMessage(stateWorker(telegramId, message))
 					}
 				} else if (update?.callbackQuery()) {
 					telegramId = update.callbackQuery().from().id()
@@ -74,37 +73,38 @@ class TelegramService {
 	}
 
 
-	SendMessage StateWorker(Long telegramId, String message) {
+	SendMessage stateWorker(Long telegramId, String message) {
 		TelegramUser telegramUser
 		telegramUser = repository.getByTelegramId(telegramId)
-		String text
-		text = ""
-		switch (telegramUser.currentState) {
+		String text = switch (telegramUser.currentState) {
 			case State.LINK_ADDING -> {
 				PriceCheckerService.Result info = checkerService.getInfo(message)
 				if (!info.isHavingParser) {
-					text = "Парсер нужо настроить, пришли <b>полное название товара со страницы</b>"
 					telegramUser.currentState = State.NAME_ADDING
-					println(message) /*URL*/
+					logger.debug(message) /*URL*/
+					"Парсер нужо настроить, пришли <b>полное название товара со страницы</b>"
 				} else {
-					text = "Ок готово"
 					telegramUser.currentState = State.NONE
+					"Ок готово"
 				}
 			}
 
 			case State.NAME_ADDING -> {
-				text = "<b><i>$message</i></b> - принято.\nНапиши цену этого товара сейчас"
 				telegramUser.currentState = State.PRICE_ADDING
-				println(message) /*Name*/
+				logger.debug(message) /*Name*/
+				"<b><i>$message</i></b> - принято.\nНапиши цену этого товара сейчас"
 			}
 
 			case State.PRICE_ADDING -> {
-				text = "Принято"
 				telegramUser.currentState = State.NONE
-				println(message) /*Price*/
+				logger.debug(message) /*Price*/
+				"Принято"
 			}
 			case State.NONE -> {
-				text = "Ниче не понял" /*Заглушка?*/
+				"Ниче не понял" /*Заглушка?*/
+			}
+			case State.SHOW_ITEMS -> {
+				""
 			}
 		}
 		SendMessage request = new SendMessage(telegramId, text)
@@ -163,18 +163,16 @@ class TelegramService {
 				repository.save(telegramUser)
 				sendMessage(request)
 			}
+
 			case State.SHOW_ITEMS -> {
 				ArrayList<String> items
 				items = ["iPhone 11 Pro", "Samsung S24 Ultra", "Казантип 2009"]
-				String text
-				text = "<i><b>Твои записи:</b></i>\n\n"
-				for (item in items){
-					text += item + "\n"
-				}
+				String text = "<i><b>Твои записи:</b></i>\n\n" + items.join('\n')
 				SendMessage request = new SendMessage(telegramUser.telegramId, text)
 						.parseMode(ParseMode.HTML)
 				sendMessage(request)
 			}
+
 			default -> {
 			}
 		}
@@ -187,7 +185,7 @@ class TelegramService {
 	}
 
 	void sendMessage(SendMessage request) {
-		bot.execute(request)
+		SendResponse response = bot.execute(request)
 	}
 
 }

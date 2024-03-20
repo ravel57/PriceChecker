@@ -21,8 +21,11 @@ class TelegramUser {
 	@Column(name = "current_state")
 	State currentState
 
-	@Column(name = "last_message_id")
-	Long lastMessageId
+	@Column(name = "last_user_message_id")
+	Long lastUserMessageId
+
+	@Column(name = "last_bot_message_id")
+	Long lastBotMessageId
 
 	TelegramUser() {
 	}
