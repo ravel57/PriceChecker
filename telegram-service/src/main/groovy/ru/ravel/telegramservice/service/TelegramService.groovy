@@ -78,6 +78,7 @@ class TelegramService {
 		TelegramUser telegramUser
 		telegramUser = repository.getByTelegramId(telegramId)
 		String text
+		text = ""
 		switch (telegramUser.currentState) {
 			case State.LINK_ADDING -> {
 				PriceCheckerService.Result info = checkerService.getInfo(message)
