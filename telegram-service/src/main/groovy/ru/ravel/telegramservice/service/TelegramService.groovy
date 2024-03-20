@@ -11,6 +11,7 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
+import ru.ravel.telegramservice.dto.Command
 import ru.ravel.telegramservice.dto.State
 import ru.ravel.telegramservice.dto.TelegramUser
 import ru.ravel.telegramservice.repository.TelegramUserRepository
@@ -25,45 +26,83 @@ class TelegramService {
 	@Autowired
 	private TelegramUserRepository repository
 
+	@Autowired
+	private PriceCheckerService checkerService
+
 	TelegramService() {
 		bot.setUpdatesListener(listener, exceptionHandler)
 	}
 
 
 	private UpdatesListener listener = new UpdatesListener() {
+
 		@Override
 		int process(List<Update> updates) {
-			updates.each {
-				if (it.message()) {
-					Long telegramId = it.message().from().id()
-					String username = it.message().from().username()
-					TelegramUser user = repository.getByTelegramId(telegramId)
-					if (user == null) {
-						repository.save(new TelegramUser(telegramId, username))
+			updates.each { update ->
+				Long telegramId
+				TelegramUser telegramUser
+				if (update?.message()) {
+					telegramId = update.message().from().id()
+					telegramUser = repository.getByTelegramId(telegramId)
+					if (telegramUser == null) {
+						telegramUser = repository.save(new TelegramUser(telegramId))
 					}
-					SendMessage request = new SendMessage(telegramId, """
-							|Привет это <i>PriceCheckerBot</i>
-							|Этот бот помогает отследить <b>изменение цен</b> на
-							|интересующие вас товары
-							""".stripMargin())
-							.parseMode(ParseMode.HTML)
-							.disableWebPagePreview(true)
-							.disableNotification(true)
-							.replyToMessageId(1)
-							.replyMarkup(new InlineKeyboardMarkup(new InlineKeyboardButton[]{
-									new InlineKeyboardButton("Добавить item💎")
-											.callbackData(State.LINK_ADDING.name())
-							}))
-					sendMessage(request)
-					user.currentState = State.LINK_ADDING
-					repository.save(user)
-				}
-				if (updates[0]?.callbackQuery()?.data()) {
-					handleCallback(it, repository.getByTelegramId(it.callbackQuery().from().id()))
+
+					String message = update.message().text()
+					if (message.startsWith('/')) {
+						switch (Command.getByCommand(message)) {
+							case Command.START -> {
+								sendGreetingMessage(telegramId)
+							}
+						}
+					} else {
+						switch (telegramUser.currentState) {
+							case State.LINK_ADDING -> {
+								PriceCheckerService.Result info = checkerService.getInfo(message)
+								if (!info.isHavingParser) {
+									String text = "парсер нужо настроить пришли полное название товара со страницы"
+									SendMessage request = new SendMessage(telegramId, text)
+											.parseMode(ParseMode.HTML)
+									sendMessage(request)
+								} else {
+									String text = "Ок готово"
+									SendMessage request = new SendMessage(telegramId, text)
+											.parseMode(ParseMode.HTML)
+									sendMessage(request)
+								}
+							}
+							case State.NONE -> {
+							}
+
+							case State.NAME_ADDING -> {
+							}
+
+							case State.PRICE_ADDING -> {
+							}
+						}
+					}
+				} else if (update?.callbackQuery()) {
+					telegramId = update.callbackQuery().from().id()
+					telegramUser = repository.getByTelegramId(telegramId)
+					handleCallback(update, telegramUser)
 				}
 			}
 			return UpdatesListener.CONFIRMED_UPDATES_ALL
 		}
+
+	}
+
+	void sendGreetingMessage(Long telegramId) {
+		String text = """
+				|Привет это <i>PriceCheckerBot</i>
+				|Этот бот помогает отследить <b>изменение цен</b> на интересующие вас товары
+				""".stripMargin()
+		SendMessage request = new SendMessage(telegramId, text)
+				.parseMode(ParseMode.HTML)
+				.replyMarkup(new InlineKeyboardMarkup([
+						new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name())
+				] as InlineKeyboardButton[]))
+		sendMessage(request)
 	}
 
 	private ExceptionHandler exceptionHandler = new ExceptionHandler() {
@@ -90,20 +129,27 @@ class TelegramService {
 		}
 	}
 
-	private void handleCallback(Update update, TelegramUser user) {
+	private void handleCallback(Update update, TelegramUser telegramUser) {
 		String callData = update.callbackQuery().data()
-		Long chatId = update.callbackQuery().message().chat().id()
 		switch (State.valueOf(callData)) {
 			case State.LINK_ADDING -> {
-				SendMessage request = new SendMessage(chatId, "Пришли ссылку на товар")
+				SendMessage request = new SendMessage(telegramUser.telegramId, "Пришли ссылку на товар")
 						.parseMode(ParseMode.HTML)
-						.disableWebPagePreview(true)
-						.disableNotification(true)
-						.replyToMessageId(1)
+
+				telegramUser.currentState = State.LINK_ADDING
+				repository.save(telegramUser)
 				sendMessage(request)
-				user.currentState = State.NONE
-				repository.save(user)
 			}
+
+			case State.NONE -> {
+			}
+
+			case State.NAME_ADDING -> {
+			}
+
+			case State.PRICE_ADDING -> {
+			}
+
 			default -> {
 			}
 		}

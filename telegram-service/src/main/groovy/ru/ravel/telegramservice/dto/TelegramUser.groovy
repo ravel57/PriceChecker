@@ -18,17 +18,14 @@ class TelegramUser {
 	@Column(name = "telegram_id")
 	Long telegramId
 
-	String username
-
 	@Column(name = "current_state")
 	State currentState
 
 	TelegramUser() {
 	}
 
-	TelegramUser(Long telegramId, String username) {
+	TelegramUser(Long telegramId) {
 		this.telegramId = telegramId
-		this.username = username
 		this.currentState = State.NONE
 	}
 }
