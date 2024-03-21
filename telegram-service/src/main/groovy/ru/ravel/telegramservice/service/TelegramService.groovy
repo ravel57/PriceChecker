@@ -2,7 +2,6 @@ package ru.ravel.telegramservice.service
 
 import com.pengrad.telegrambot.*
 import com.pengrad.telegrambot.model.Update
-import com.pengrad.telegrambot.model.request.ChatAction
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.model.request.ParseMode
@@ -54,6 +53,8 @@ class TelegramService {
 						telegramUser = repository.save(new TelegramUser(telegramId))
 					}
 					String message = update.message().text()
+					telegramUser.lastUserMessageId = update.message().messageId()
+					repository.save(telegramUser)
 
 					if (update?.message()?.text() && message.startsWith('/')) {
 						switch (Command.getByCommand(message)) {
@@ -85,11 +86,12 @@ class TelegramService {
 				if (!info.isHavingParser) {
 					telegramUser.currentState = State.NAME_ADDING
 					logger.debug(message) /*URL*/
-					"Парсер нужо настроить, пришли <b>полное название товара со страницы</b>"
+					"Парсер нужо настроить, пришли <i><u>полное название</u></i> товара со страницы"
 				} else {
 					deleteMessage(telegramId, telegramUser.lastBotMessageId)
 					telegramUser.currentState = State.NONE
-					SendMessage request = new SendMessage(telegramId, "Все готово")
+					SendMessage request = new SendMessage(telegramId, "<b>Готово!</b>")
+							.parseMode(ParseMode.HTML)
 					sendMessage(request, telegramId)
 					sendGreetingMessage(telegramId)
 					""
@@ -99,13 +101,16 @@ class TelegramService {
 			case State.NAME_ADDING -> {
 				telegramUser.currentState = State.PRICE_ADDING
 				logger.debug(message) /*Name*/
-				"<b><i>$message</i></b> - принято.\nНапиши цену этого товара сейчас"
+				"<u><i>$message</i></u> - принято.\nНапиши цену этого товара сейчас"
 			}
 
 			case State.PRICE_ADDING -> {
 				deleteMessage(telegramId, telegramUser.lastBotMessageId)
 				telegramUser.currentState = State.NONE
 				logger.debug(message) /*Price*/
+				SendMessage request = new SendMessage(telegramId, "<b>Готово!</b>")
+						.parseMode(ParseMode.HTML)
+				sendMessage(request, telegramId)
 				sendGreetingMessage(telegramId)
 				""
 			}
@@ -115,7 +120,7 @@ class TelegramService {
 			}
 
 			case State.NONE -> {
-				"Ниче не понял" /*Заглушка?*/
+				"Ничего не понял, используй /start" /*Заглушка?*/
 			}
 		}
 		repository.save(telegramUser)
@@ -127,14 +132,14 @@ class TelegramService {
 
 	void sendGreetingMessage(Long telegramId) {
 		String text = """
-				|Привет это <i>PriceCheckerBot</i>
+				|Привет это <i><u>PriceCheckerBot</u></i>
 				|Этот бот помогает отследить <b>изменение цен</b> на интересующие вас товары
 				""".stripMargin()
 		SendMessage request = new SendMessage(telegramId, text)
 				.parseMode(ParseMode.HTML)
 				.replyMarkup(new InlineKeyboardMarkup([
 						new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name()),
-						new InlineKeyboardButton("Посмотреть мои записи").callbackData(State.SHOW_ITEMS.name())
+						new InlineKeyboardButton("Посмотреть мои записи 🗒️").callbackData(State.SHOW_ITEMS.name())
 				] as InlineKeyboardButton[]))
 		sendMessage(request, telegramId)
 	}
@@ -166,10 +171,13 @@ class TelegramService {
 	private void handleCallback(Update update, TelegramUser telegramUser) {
 		String callData = update.callbackQuery().data()
 		telegramUser.callbackQueryId = update.callbackQuery().id()
-		if (!callData.startsWith("del")) {
+		telegramUser.lastBotMessageId = update.callbackQuery().message().messageId()
+		repository.save(telegramUser)
+
+		if (!callData.startsWith("del") && !callData.startsWith("back")) {
 			switch (State.valueOf(callData)) {
 				case State.LINK_ADDING -> {
-					String text = "Пришли ссылку на товар"
+					String text = "Пришли <u>ссылку</u> на товар"
 					telegramUser.currentState = State.LINK_ADDING
 					repository.save(telegramUser)
 					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text)
@@ -183,18 +191,21 @@ class TelegramService {
 						Integer itemCount = items.indexOf(item) + 1
 						text += "$itemCount. $item\n"
 					}
-					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text, keyboardGenerator(items))
+					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text, itemsKeyboard(items))
 				}
 
 				default -> {
 				}
 			}
 		} else if (callData.startsWith("del")) {
-			logger.debug(callData.split('=')[-1]) /*тут должно быть удаление записи*/
+			logger.debug(callData) /*тут должно быть удаление записи*/
+		} else if (callData.startsWith("back")) {
+			deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
+			sendGreetingMessage(telegramUser.telegramId)
 		}
 	}
 
-	static InlineKeyboardMarkup keyboardGenerator(ArrayList<String> items) {
+	static InlineKeyboardMarkup itemsKeyboard(ArrayList<String> items) {
 		def buttons = items.collect { item ->
 			new InlineKeyboardButton("❌ ${items.indexOf(item) + 1}")
 					.callbackData("del=${items.indexOf(item) + 1}")
@@ -211,6 +222,8 @@ class TelegramService {
 		if (!row.isEmpty()) {
 			inlineKeyboard.addRow(row as InlineKeyboardButton[])
 		}
+		inlineKeyboard.addRow(new InlineKeyboardButton("Назад")
+				.callbackData("back"))
 		return inlineKeyboard
 	}
 
@@ -234,12 +247,12 @@ class TelegramService {
 	}
 
 //	Это тот самый popup alert (только вот заюзать я его не смог)
-	void showAlert(TelegramUser telegramUser) {
-		AnswerCallbackQuery request = new AnswerCallbackQuery(telegramUser.callbackQueryId)
-				.text("Настройка завершена")
-				.showAlert(true)
-		bot.execute(request)
-	}
+//	void showAlert(TelegramUser telegramUser) {
+//		AnswerCallbackQuery request = new AnswerCallbackQuery(telegramUser.callbackQueryId)
+//				.text("Настройка завершена")
+//				.showAlert(true)
+//		bot.execute(request)
+//	}
 
 	void sendMessage(SendMessage request, Long telegramId) {
 		SendResponse response = bot.execute(request)
