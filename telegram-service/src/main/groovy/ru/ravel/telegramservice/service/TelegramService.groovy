@@ -2,9 +2,12 @@ package ru.ravel.telegramservice.service
 
 import com.pengrad.telegrambot.*
 import com.pengrad.telegrambot.model.Update
+import com.pengrad.telegrambot.model.request.ChatAction
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.model.request.ParseMode
+import com.pengrad.telegrambot.request.AnswerCallbackQuery
+import com.pengrad.telegrambot.request.DeleteMessage
 import com.pengrad.telegrambot.request.EditMessageText
 import com.pengrad.telegrambot.request.SendMessage
 import com.pengrad.telegrambot.response.SendResponse
@@ -59,7 +62,7 @@ class TelegramService {
 							}
 						}
 					} else {
-						sendMessage(stateWorker(telegramId, message))
+						stateWorker(telegramId, message)
 					}
 				} else if (update?.callbackQuery()) {
 					telegramId = update.callbackQuery().from().id()
@@ -73,7 +76,7 @@ class TelegramService {
 	}
 
 
-	SendMessage stateWorker(Long telegramId, String message) {
+	void stateWorker(Long telegramId, String message) {
 		TelegramUser telegramUser
 		telegramUser = repository.getByTelegramId(telegramId)
 		String text = switch (telegramUser.currentState) {
@@ -84,8 +87,12 @@ class TelegramService {
 					logger.debug(message) /*URL*/
 					"Парсер нужо настроить, пришли <b>полное название товара со страницы</b>"
 				} else {
+					deleteMessage(telegramId, telegramUser.lastBotMessageId)
 					telegramUser.currentState = State.NONE
-					"Ок готово"
+					SendMessage request = new SendMessage(telegramId, "Все готово")
+					sendMessage(request, telegramId)
+					sendGreetingMessage(telegramId)
+					""
 				}
 			}
 
@@ -96,21 +103,25 @@ class TelegramService {
 			}
 
 			case State.PRICE_ADDING -> {
+				deleteMessage(telegramId, telegramUser.lastBotMessageId)
 				telegramUser.currentState = State.NONE
 				logger.debug(message) /*Price*/
-				"Принято"
+				sendGreetingMessage(telegramId)
+				""
 			}
-			case State.NONE -> {
-				"Ниче не понял" /*Заглушка?*/
-			}
+
 			case State.SHOW_ITEMS -> {
 				""
 			}
+
+			case State.NONE -> {
+				"Ниче не понял" /*Заглушка?*/
+			}
 		}
-		SendMessage request = new SendMessage(telegramId, text)
-				.parseMode(ParseMode.HTML)
 		repository.save(telegramUser)
-		return request
+		if (telegramUser.currentState != State.NONE) {
+			editMessage(telegramId, telegramUser.lastBotMessageId, text)
+		}
 	}
 
 
@@ -125,7 +136,7 @@ class TelegramService {
 						new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name()),
 						new InlineKeyboardButton("Посмотреть мои записи").callbackData(State.SHOW_ITEMS.name())
 				] as InlineKeyboardButton[]))
-		sendMessage(request)
+		sendMessage(request, telegramId)
 	}
 
 	private ExceptionHandler exceptionHandler = new ExceptionHandler() {
@@ -154,38 +165,88 @@ class TelegramService {
 
 	private void handleCallback(Update update, TelegramUser telegramUser) {
 		String callData = update.callbackQuery().data()
-		switch (State.valueOf(callData)) {
-			case State.LINK_ADDING -> {
-				SendMessage request = new SendMessage(telegramUser.telegramId, "Пришли ссылку на товар")
-						.parseMode(ParseMode.HTML)
+		telegramUser.callbackQueryId = update.callbackQuery().id()
+		if (!callData.startsWith("del")) {
+			switch (State.valueOf(callData)) {
+				case State.LINK_ADDING -> {
+					String text = "Пришли ссылку на товар"
+					telegramUser.currentState = State.LINK_ADDING
+					repository.save(telegramUser)
+					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text)
+				}
 
-				telegramUser.currentState = State.LINK_ADDING
-				repository.save(telegramUser)
-				sendMessage(request)
-			}
+				case State.SHOW_ITEMS -> {
+					ArrayList<String> items = ["iPhone 11 Pro", "Samsung S24 Ultra", "Казантип 2009",
+											   "Завод по производству алюминиевых ведер", "Казахи", "Нагетсы", "Шины 12``"]
+					String text = "<i><b>Твои записи:</b></i>\n\n"
+					for (item in items) {
+						Integer itemCount = items.indexOf(item) + 1
+						text += "$itemCount. $item\n"
+					}
+					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text, keyboardGenerator(items))
+				}
 
-			case State.SHOW_ITEMS -> {
-				ArrayList<String> items
-				items = ["iPhone 11 Pro", "Samsung S24 Ultra", "Казантип 2009"]
-				String text = "<i><b>Твои записи:</b></i>\n\n" + items.join('\n')
-				SendMessage request = new SendMessage(telegramUser.telegramId, text)
-						.parseMode(ParseMode.HTML)
-				sendMessage(request)
+				default -> {
+				}
 			}
-
-			default -> {
-			}
+		} else if (callData.startsWith("del")) {
+			logger.debug(callData.split('=')[-1]) /*тут должно быть удаление записи*/
 		}
 	}
 
-	void editMessage(Long telegramId, Integer messageId, String text) {
+	static InlineKeyboardMarkup keyboardGenerator(ArrayList<String> items) {
+		def buttons = items.collect { item ->
+			new InlineKeyboardButton("❌ ${items.indexOf(item) + 1}")
+					.callbackData("del=${items.indexOf(item) + 1}")
+		}
+		def inlineKeyboard = new InlineKeyboardMarkup()
+		def row = []
+		buttons.each { button ->
+			row.add(button)
+			if (row.size() == 3) {
+				inlineKeyboard.addRow(row as InlineKeyboardButton[])
+				row = []
+			}
+		}
+		if (!row.isEmpty()) {
+			inlineKeyboard.addRow(row as InlineKeyboardButton[])
+		}
+		return inlineKeyboard
+	}
+
+	void deleteMessage(Long telegramId, Integer messageId) {
+		DeleteMessage deleteMessage = new DeleteMessage(telegramId, messageId)
+		bot.execute(deleteMessage)
+	}
+
+	void editMessage(
+			Long telegramId,
+			Integer messageId,
+			String text,
+			InlineKeyboardMarkup keyboard = null
+	) {
 		EditMessageText editedMessage = new EditMessageText(telegramId, messageId, text)
 				.parseMode(ParseMode.HTML)
+		if (keyboard) {
+			editedMessage.replyMarkup(keyboard)
+		}
 		bot.execute(editedMessage)
 	}
 
-	void sendMessage(SendMessage request) {
+//	Это тот самый popup alert (только вот заюзать я его не смог)
+	void showAlert(TelegramUser telegramUser) {
+		AnswerCallbackQuery request = new AnswerCallbackQuery(telegramUser.callbackQueryId)
+				.text("Настройка завершена")
+				.showAlert(true)
+		bot.execute(request)
+	}
+
+	void sendMessage(SendMessage request, Long telegramId) {
 		SendResponse response = bot.execute(request)
+		TelegramUser telegramUser
+		telegramUser = repository.getByTelegramId(telegramId)
+		telegramUser.lastBotMessageId = response.message().messageId()
+		repository.save(telegramUser)
 	}
 
 }

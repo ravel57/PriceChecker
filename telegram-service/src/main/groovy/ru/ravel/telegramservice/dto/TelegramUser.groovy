@@ -22,10 +22,13 @@ class TelegramUser {
 	State currentState
 
 	@Column(name = "last_user_message_id")
-	Long lastUserMessageId
+	Integer lastUserMessageId
 
 	@Column(name = "last_bot_message_id")
-	Long lastBotMessageId
+	Integer lastBotMessageId
+
+	@Column(name = "callback_query_id")
+	String callbackQueryId
 
 	TelegramUser() {
 	}
