@@ -10,15 +10,14 @@ spring:
         format_sql: true
         hbm2ddl:
           create_namespaces: true
-  session:
-    jdbc:
-      initialize-schema: never
 
 logging:
   level:
-    org.hibernate.SQL: trace
-    org.hibernate.type: trace
-    org.hibernate.type.descriptor.sql.BasicBinder: trace
+    org:
+      hibernate:
+        SQL: trace
+        type: trace
+#    org.hibernate.type.descriptor.sql.BasicBinder: trace
 
 eureka.client.service-url.defaultZone: http://localhost:8761/eureka
 

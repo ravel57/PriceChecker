@@ -1,6 +1,6 @@
 spring:
   datasource:
-    url: jdbc:postgresql://localhost:5432/price_checker?currentSchema=telegram_service
+    url: jdbc:postgresql://localhost:5432/price_checker?currentSchema=web_parser_service
     username: postgres
     password: postgres
   jpa:
@@ -8,20 +8,23 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        hbm2ddl:
+          create_namespaces: true
   session:
     jdbc:
       initialize-schema: never
+  kafka:
+    producer:
+      bootstrap-servers: localhost:9092
+      key-serializer: org.apache.kafka.common.serialization.LongSerializer
+      value-serializer: org.springframework.kafka.support.serializer.JsonSerializer
 
-logging:
-  level:
+
+logging.level:
     org.hibernate.SQL: trace
     org.hibernate.type: trace
     org.hibernate.type.descriptor.sql.BasicBinder: trace
 
-eureka:
-  client:
-    service-url:
-      defaultZone: http://localhost:8761/eureka
+eureka.client.service-url.defaultZone: http://localhost:8761/eureka
 
-server:
-  port: 0
+server.port: 8080

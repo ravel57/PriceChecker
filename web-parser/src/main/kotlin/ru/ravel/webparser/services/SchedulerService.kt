@@ -3,54 +3,57 @@ package ru.ravel.webparser.services
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.scheduling.annotation.Scheduled
 import org.springframework.stereotype.Service
+import ru.ravel.webparser.dto.ParsedProduct
 import java.util.concurrent.Callable
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
 import java.util.concurrent.Future
 
 @Service
-class SchedulerService(
+class SchedulerService {
 	@Autowired
-	val webParser: WebParser
-) {
+	private lateinit var webParser: WebParserService
 
-	@Scheduled(cron = "0 0 */12 * * *")
+	@Scheduled(cron = "* * */4 * * *")
 	fun updatePrises() {
-		val list = mutableListOf<Future<WebParser.ParsedProduct>>()
 		val pool: ExecutorService = Executors.newFixedThreadPool(10)
 
-//		list.add(pool.submit(myCallable1))
+//		val list = mutableListOf(
+//			pool.submit(
+//				WebParserCallable(
+//					webParser,
+//					"https://store77.net/telefony_samsung/telefon_samsung_galaxy_s24_8_128gb_zheltyy/",
+//					"Телефон Samsung Galaxy S24 8/128Gb (Желтый)",
+//					"66 600 Р",
+//				)
+//			),
+//		)
 //		list.add(pool.submit(myCallable2))
 //		list.add(pool.submit(myCallable3))
 
-		for (future: Future<WebParser.ParsedProduct> in list) {
-			future.get()
-		}
+//		for (future: Future<ParsedProduct> in list) {
+//			future.get()
+//		}
 
 	}
 
 
-	class MyCallable(
-		@Autowired
-		private val webParser: WebParser,
+//	class WebParserCallable(
+//		private val webParser: WebParserService,
+//		private val url: String,
+//		private val searchName: String,
+//		private val searchPrice: String,
+//	) : Callable<ParsedProduct> {
+//
+//		override fun call(): ParsedProduct {
+//			return webParser.getProduct(
+//				url = url,
+//				searchName = searchName,
+//				searchPrice = searchPrice
+//			)
+//		}
+//
+//	}
 
-		private val toCheck: ToCheck,
-	) : Callable<WebParser.ParsedProduct> {
 
-		override fun call(): WebParser.ParsedProduct {
-			return webParser.getPrice(
-				url = toCheck.url,
-				searchName = toCheck.searchName,
-				price = toCheck.price
-			)
-		}
-
-	}
-
-
-	data class ToCheck(
-		val url: String,
-		val searchName: String,
-		val price: String,
-	)
 }
