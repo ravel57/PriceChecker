@@ -78,55 +78,68 @@ class TelegramService {
 	}
 
 
-	void stateWorker(Long telegramId, String message) {
-		TelegramUser telegramUser
-		telegramUser = repository.getByTelegramId(telegramId)
+	void stateWorker(Long telegramId, String messageText) {
+		TelegramUser telegramUser = repository.getByTelegramId(telegramId)
+
 		String text = switch (telegramUser.currentState) {
 			case State.LINK_ADDING -> {
-				PriceCheckerService.Result info = checkerService.getInfo(message)
+				PriceCheckerService.Result info = checkerService.getInfo(messageText)
 				if (!info.isHavingParser) {
 					telegramUser.currentState = State.NAME_ADDING
-					logger.debug(message) /*URL*/
-					"Парсер нужо настроить, пришли <i><u>полное название</u></i> товара со страницы"
+					logger.debug(messageText) /*URL*/
+					editMessage(
+							telegramUser.telegramId,
+							telegramUser.lastBotMessageId,
+							"Пришли <u>ссылку</u> на товар\n<b><i>$messageText</i></b> - принято✅"
+					)
+					"<b>Парсер нужо настроить</b>\nПришли <i><u>полное название</u></i> товара со страницы"
 				} else {
-					deleteMessage(telegramId, telegramUser.lastBotMessageId)
+					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
 					telegramUser.currentState = State.NONE
-					SendMessage request = new SendMessage(telegramId, "<b>Готово!</b>")
+					SendMessage request = new SendMessage(telegramUser.telegramId, "<b>Готово!</b>")
 							.parseMode(ParseMode.HTML)
-					sendMessage(request, telegramId)
-					sendGreetingMessage(telegramId)
+					sendMessage(request, telegramUser.telegramId)
+					sendGreetingMessage(telegramUser.telegramId)
 					""
 				}
 			}
 
 			case State.NAME_ADDING -> {
 				telegramUser.currentState = State.PRICE_ADDING
-				logger.debug(message) /*Name*/
-				"<u><i>$message</i></u> - принято.\nНапиши цену этого товара сейчас"
+				logger.debug(messageText) /*Name*/
+				editMessage(
+						telegramUser.telegramId,
+						telegramUser.lastBotMessageId,
+						"""
+						|Пришли <i><u>полное название</u></i> товара со страницы
+						|<b><i>$messageText</i></b> - принято✅
+						""".stripMargin()
+				)
+				"Напиши цену этого товара сейчас"
 			}
 
 			case State.PRICE_ADDING -> {
-				deleteMessage(telegramId, telegramUser.lastBotMessageId)
 				telegramUser.currentState = State.NONE
-				logger.debug(message) /*Price*/
-				SendMessage request = new SendMessage(telegramId, "<b>Готово!</b>")
+				logger.debug(messageText) /*Price*/
+				editMessage(
+						telegramUser.telegramId,
+						telegramUser.lastBotMessageId,
+						"Напиши цену этого товара сейчас\n<b><i>$messageText</i></b> - принято✅"
+				)
+				SendMessage request = new SendMessage(telegramUser.telegramId,
+						"<b>Настройка персера завершена!</b>")
 						.parseMode(ParseMode.HTML)
-				sendMessage(request, telegramId)
-				sendGreetingMessage(telegramId)
+				sendMessage(request, telegramUser.telegramId)
+				sendGreetingMessage(telegramUser.telegramId)
 				""
 			}
 
-			case State.SHOW_ITEMS -> {
-				""
-			}
-
-			case State.NONE -> {
-				"Ничего не понял, используй /start" /*Заглушка?*/
-			}
 		}
 		repository.save(telegramUser)
 		if (telegramUser.currentState != State.NONE) {
-			editMessage(telegramId, telegramUser.lastBotMessageId, text)
+			SendMessage request = new SendMessage(telegramUser.telegramId, text)
+					.parseMode(ParseMode.HTML)
+			sendMessage(request, telegramId)
 		}
 	}
 
