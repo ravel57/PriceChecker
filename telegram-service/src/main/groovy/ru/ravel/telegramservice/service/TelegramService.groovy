@@ -19,6 +19,7 @@ import ru.ravel.telegramservice.dto.State
 import ru.ravel.telegramservice.dto.TelegramUser
 import ru.ravel.telegramservice.repository.TelegramUserRepository
 
+
 @Service
 class TelegramService {
 
