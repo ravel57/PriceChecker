@@ -52,7 +52,8 @@ class TelegramService {
 						telegramUser = repository.getByTelegramId(telegramId)
 
 						if (telegramUser == null) {
-							telegramUser = repository.save(new TelegramUser(telegramId))
+							telegramUser = checkerService.saveNewUser(new TelegramUser(telegramId))
+							repository.save(telegramUser)
 						}
 						String messageText = update.message().text()
 						telegramUser.lastUserMessageId = update.message().messageId()

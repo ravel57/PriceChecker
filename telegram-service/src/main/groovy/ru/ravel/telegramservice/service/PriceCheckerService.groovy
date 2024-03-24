@@ -7,11 +7,11 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.stereotype.Service
 import ru.ravel.core.dto.ParseInfo
+import ru.ravel.telegramservice.entity.TelegramUser
 
 import java.net.http.HttpClient
 import java.net.http.HttpRequest
 import java.net.http.HttpResponse
-import java.nio.charset.StandardCharsets
 
 @Service
 class PriceCheckerService {
@@ -19,28 +19,36 @@ class PriceCheckerService {
 	private final static Logger logger = LoggerFactory.getLogger(this.class)
 
 	Result getInfo(ParseInfo info) {
-		HttpResponse<String> response = sendRequest(info)
+		String json = new Gson().toJson(info)
+		HttpResponse<String> response = sendRequest(json, "http://localhost:8765/web-parser/parse-by-parse-info")
 		return handleResponse(response)
 	}
 
 	Result getInfo(String url) {
-		HttpResponse<String> response = sendRequest(url)
+		HttpResponse<String> response = sendRequest(url, "http://localhost:8765/web-parser/parse")
 		return handleResponse(response)
 	}
 
 	private Result handleResponse(HttpResponse<String> response) {
-		ParseInfo parseInfo = new Gson().fromJson(response.body(), ParseInfo.class)
 		return switch (response.statusCode()) {
 			case HttpStatus.SC_OK -> {
+				ParseInfo parseInfo = new Gson().fromJson(response.body(), ParseInfo.class)
 				new Result(true, parseInfo)
 			}
 			case HttpStatus.SC_NOT_FOUND -> {
-				new Result(false, parseInfo)
+				new Result(false, null)
 			}
-			default -> {
-				throw new NullPointerException()
+			case HttpStatus.SC_INTERNAL_SERVER_ERROR -> {
+				logger.error("INTERNAL_SERVER_ERROR")
+				throw new RuntimeException()
 			}
 		}
+	}
+
+	TelegramUser saveNewUser(TelegramUser telegramUser) {
+		HttpResponse<String> response = sendRequest("", "http://localhost:8765/web-parser/parse")
+		/*telegramUser.id = */ new Gson().fromJson(response.body(), ParseInfo.class)
+		return telegramUser
 	}
 
 	class Result {
@@ -53,38 +61,14 @@ class PriceCheckerService {
 		}
 	}
 
-	static HttpResponse sendRequest(String payload) {
+	static HttpResponse sendRequest(String payload, String url) {
 		HttpRequest request = HttpRequest.newBuilder()
-				.uri(URI.create("http://localhost:8765/web-parser/parse"))
+				.uri(URI.create(url))
 				.header("Content-Type", MediaType.APPLICATION_JSON)
 				.POST(HttpRequest.BodyPublishers.ofString(payload))
 				.build()
 		HttpResponse response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString())
-		response.body()
 		return response
 	}
 
-	static HttpResponse sendRequest(ParseInfo info) {
-		HttpRequest request = HttpRequest.newBuilder()
-				.uri(URI.create("http://localhost:8765/web-parser/parse-by-parse-info"))
-				.header("Content-Type", MediaType.APPLICATION_JSON)
-				.POST(HttpRequest.BodyPublishers.ofString(new Gson().toJson(info)))
-				.build()
-		HttpResponse response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString())
-		response.body()
-		return response
-	}
-
-	private static String getFormDataAsString(Map<String, String> formData) {
-		StringBuilder formBodyBuilder = new StringBuilder();
-		for (Map.Entry<String, String> singleEntry : formData.entrySet()) {
-			if (formBodyBuilder.length() > 0) {
-				formBodyBuilder.append("&")
-			}
-			formBodyBuilder.append(URLEncoder.encode(singleEntry.getKey(), StandardCharsets.UTF_8))
-			formBodyBuilder.append("=")
-			formBodyBuilder.append(URLEncoder.encode(singleEntry.getValue(), StandardCharsets.UTF_8))
-		}
-		return formBodyBuilder.toString()
-	}
 }

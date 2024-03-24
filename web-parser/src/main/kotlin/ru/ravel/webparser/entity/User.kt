@@ -16,6 +16,6 @@ data class User(
 		targetEntity = ParsedProduct::class
 	)
 	@OnDelete(action = OnDeleteAction.CASCADE)
-	@JoinColumn(name = "products")
+	@JoinColumn(name = "user_id")
 	var products: List<ParsedProduct> = mutableListOf()
 )

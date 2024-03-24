@@ -28,9 +28,6 @@ class WebParserService {
 	private lateinit var repository: Repository
 
 	@Autowired
-	private lateinit var repository2: WebRepository
-
-	@Autowired
 	private lateinit var kafka: KafkaTemplate<Long, ParsedProduct>
 
 	private val logger = LoggerFactory.getLogger(this.javaClass)
@@ -44,7 +41,8 @@ class WebParserService {
 			throw ParserDoesntExistException("parser not exist for selected store")
 		}
 		val parsedProduct: ParsedProduct = getByJSoup(url, parser)
-		kafka.send("product-price-changed-event", parsedProduct.id ?: 0, parsedProduct).whenCompleteAsync { result, ex ->
+		repository.saveParsedProduct(parsedProduct)
+		kafka.send("product-price-changed-event", parsedProduct.id!!, parsedProduct).whenCompleteAsync { result, ex ->
 			if (ex == null)
 				logger.info(result.toString())
 			else
@@ -62,7 +60,6 @@ class WebParserService {
 			repository.saveParser(parser)
 			parser
 		}
-
 		val parsedProduct: ParsedProduct = getByJSoup(parseInfo.url!!, parser)
 		repository.saveParsedProduct(parsedProduct)
 		kafka.send("product-price-changed-event", parsedProduct.id!!, parsedProduct)
@@ -84,11 +81,9 @@ class WebParserService {
 			val price = allElements
 				.map { it.getElementsByAttributeValue("class", parser.allPrices[0].classAtr) }
 				.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
-
 			val name = allElements
 				.map { it.getElementsByAttributeValue("class", parser.allNames[0].classAtr) }
 				.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
-
 			ParsedProduct(
 				name = name,
 				price = price,

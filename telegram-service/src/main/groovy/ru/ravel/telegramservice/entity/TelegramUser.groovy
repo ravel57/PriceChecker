@@ -21,7 +21,6 @@ import javax.persistence.OneToOne
 class TelegramUser {
 
 	@Id
-	@GeneratedValue(strategy= GenerationType.IDENTITY)
 	Long id
 
 	@Column(name = "telegram_id")
