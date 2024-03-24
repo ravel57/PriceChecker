@@ -12,6 +12,7 @@ data class ParsedProductPrice(
 
 	var strValue: String = "0",
 
+	@Transient
 	var value: Double = strValue.replace(',', '.').replace("[^0-9.]".toRegex(), "").toDouble(),
 
 	var idAtr: String = "",

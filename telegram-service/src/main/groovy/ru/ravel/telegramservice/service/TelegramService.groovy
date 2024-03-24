@@ -92,7 +92,8 @@ class TelegramService {
 				if (info.isHavingParser) {
 					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
 					telegramUser.currentState = State.NONE
-					SendMessage request = new SendMessage(telegramUser.telegramId, "<b>Готово!</b>")
+					SendMessage request = new SendMessage(telegramUser.telegramId,
+							"<b>Готово!</b>\n\n${info.result.name}\n\n${info.result.price}")
 							.parseMode(ParseMode.HTML)
 					sendMessage(request, telegramUser.telegramId)
 					sendGreetingMessage(telegramUser.telegramId)
@@ -100,11 +101,9 @@ class TelegramService {
 				} else {
 					telegramUser.currentState = State.NAME_ADDING
 					logger.debug(messageText) /*URL*/
-					editMessage(
-							telegramUser.telegramId,
+					editMessage(telegramUser.telegramId,
 							telegramUser.lastBotMessageId,
-							"Пришли <u>ссылку</u> на товар\n<b><i>$messageText</i></b> - принято✅"
-					)
+							"Пришли <u>ссылку</u> на товар\n<b><i>$messageText</i></b> - принято✅")
 					"<b>Парсер нужо настроить</b>\nПришли <i><u>полное название</u></i> товара со страницы"
 				}
 			}
@@ -113,14 +112,12 @@ class TelegramService {
 				telegramUser.parseInfo.name = messageText
 				telegramUser.currentState = State.PRICE_ADDING
 				logger.debug(messageText) /*Name*/
-				editMessage(
-						telegramUser.telegramId,
+				editMessage(telegramUser.telegramId,
 						telegramUser.lastBotMessageId,
 						"""
 						|Пришли <i><u>полное название</u></i> товара со страницы
 						|<b><i>$messageText</i></b> - принято✅
-						""".stripMargin()
-				)
+						""".stripMargin())
 				"Напиши цену этого товара сейчас"
 			}
 
@@ -128,20 +125,21 @@ class TelegramService {
 				telegramUser.parseInfo.price = messageText
 				PriceCheckerService.Result info = checkerService.getInfo(telegramUser.parseInfo)
 				if (info.isHavingParser) {
-					editMessage(
-							telegramUser.telegramId,
+					editMessage(telegramUser.telegramId,
 							telegramUser.lastBotMessageId,
-							"Напиши цену этого товара сейчас\n<b><i>$messageText</i></b> - принято✅"
-					)
+							"Напиши цену этого товара сейчас\n<b><i>$messageText</i></b> - принято✅")
 					telegramUser.currentState = State.NONE
 					logger.debug(messageText) /*Price*/
-					SendMessage request = new SendMessage(telegramUser.telegramId, "<b>Настройка персера завершена!</b>")
+					SendMessage request = new SendMessage(telegramUser.telegramId,
+							"<b>Настройка персера завершена!</b>\n\n${info.result.name}\n\n${info.result.price}")
 							.parseMode(ParseMode.HTML)
 					sendMessage(request, telegramUser.telegramId)
 					sendGreetingMessage(telegramUser.telegramId)
 				}
 				""
 			}
+			case State.NONE -> throw new IllegalStateException()
+			case State.SHOW_ITEMS -> throw new IllegalStateException()
 		}
 		repository.save(telegramUser)
 		if (telegramUser.currentState != State.NONE) {
@@ -254,12 +252,10 @@ class TelegramService {
 		bot.execute(deleteMessage)
 	}
 
-	void editMessage(
-			Long telegramId,
-			Integer messageId,
-			String text,
-			InlineKeyboardMarkup keyboard = null
-	) {
+	void editMessage(Long telegramId,
+					 Integer messageId,
+					 String text,
+					 InlineKeyboardMarkup keyboard = null) {
 		EditMessageText editedMessage = new EditMessageText(telegramId, messageId, text)
 				.parseMode(ParseMode.HTML)
 		if (keyboard) {

@@ -20,30 +20,44 @@ class PriceCheckerService {
 
 	Result getInfo(ParseInfo info) {
 		HttpResponse<String> response = sendRequest(info)
-		return new Result(response.statusCode() == HttpStatus.SC_OK, info.url)
+		return handleResponse(response)
 	}
 
 	Result getInfo(String url) {
 		HttpResponse<String> response = sendRequest(url)
-		return new Result(response.statusCode() == HttpStatus.SC_OK, url)
+		return handleResponse(response)
+	}
+
+	private Result handleResponse(HttpResponse<String> response) {
+		ParseInfo parseInfo = new Gson().fromJson(response.body(), ParseInfo.class)
+		return switch (response.statusCode()) {
+			case HttpStatus.SC_OK -> {
+				new Result(true, parseInfo)
+			}
+			case HttpStatus.SC_NOT_FOUND -> {
+				new Result(false, parseInfo)
+			}
+			default -> {
+				throw new NullPointerException()
+			}
+		}
 	}
 
 	class Result {
 		boolean isHavingParser
-		String result
+		ParseInfo result
 
-		Result(boolean isHavingParser, String result) {
+		Result(boolean isHavingParser, ParseInfo result) {
 			this.isHavingParser = isHavingParser
 			this.result = result
 		}
 	}
 
 	static HttpResponse sendRequest(String payload) {
-		Map<String, String> formData = Map.of("url", payload)
 		HttpRequest request = HttpRequest.newBuilder()
 				.uri(URI.create("http://localhost:8765/web-parser/parse"))
 				.header("Content-Type", MediaType.APPLICATION_JSON)
-				.POST(HttpRequest.BodyPublishers.ofString(getFormDataAsString(formData)))
+				.POST(HttpRequest.BodyPublishers.ofString(payload))
 				.build()
 		HttpResponse response = HttpClient.newHttpClient().send(request, HttpResponse.BodyHandlers.ofString())
 		response.body()

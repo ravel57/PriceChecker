@@ -17,6 +17,7 @@ import ru.ravel.webparser.repository.Repository
 import ru.ravel.webparser.repository.WebRepository
 import java.io.IOException
 import java.net.URI
+import java.net.URL
 import java.util.*
 import java.util.function.Predicate
 
@@ -25,6 +26,7 @@ class WebParserService {
 
 	@Autowired
 	private lateinit var repository: Repository
+
 	@Autowired
 	private lateinit var repository2: WebRepository
 
@@ -35,13 +37,14 @@ class WebParserService {
 
 
 	fun getProduct(url: String): ParsedProduct {
-		val parser = if (repository.isStoreParserExist(url)) {
-			repository.getParser(url)
+		val host = URL(url).host
+		val parser = if (repository.isStoreParserExist(host)) {
+			repository.getParser(host)
 		} else {
 			throw ParserDoesntExistException("parser not exist for selected store")
 		}
 		val parsedProduct: ParsedProduct = getByJSoup(url, parser)
-		kafka.send("product-price-changed-event", parsedProduct.id!!, parsedProduct).whenCompleteAsync { result, ex ->
+		kafka.send("product-price-changed-event", parsedProduct.id ?: 0, parsedProduct).whenCompleteAsync { result, ex ->
 			if (ex == null)
 				logger.info(result.toString())
 			else
@@ -51,15 +54,17 @@ class WebParserService {
 	}
 
 	fun getProduct(parseInfo: ParseInfo): ParsedProduct {
-		val parser = if (!repository.isStoreParserExist(parseInfo.url!!)) {
-			val parser = getParserByJSoup(parseInfo)
-			repository2.save(parser)
-			parser
+		val host = URL(parseInfo.url!!).host
+		val parser = if (repository.isStoreParserExist(host)) {
+			repository.getParser(host)
 		} else {
-			repository.getParser(parseInfo.url!!)
+			val parser = getParserByJSoup(parseInfo)
+			repository.saveParser(parser)
+			parser
 		}
 
 		val parsedProduct: ParsedProduct = getByJSoup(parseInfo.url!!, parser)
+		repository.saveParsedProduct(parsedProduct)
 		kafka.send("product-price-changed-event", parsedProduct.id!!, parsedProduct)
 			.whenCompleteAsync { result, ex ->
 				if (ex == null) {
@@ -77,12 +82,12 @@ class WebParserService {
 			val document = Jsoup.connect(url).followRedirects(true).timeout(60000).get()
 			val allElements = document.body().allElements
 			val price = allElements
-				.map { node -> node.getElementsByAttributeValue("class", parser.selectedPrice.classAtr) }
-				.find { it.size > 0 }?.first()?.childNodes()?.first().toString()
+				.map { it.getElementsByAttributeValue("class", parser.allPrices[0].classAtr) }
+				.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
 
 			val name = allElements
-				.map { node -> node.getElementsByAttributeValue("class", parser.selectedName.classAtr) }
-				.find { it.size > 0 }?.first()?.childNodes()?.first().toString()
+				.map { it.getElementsByAttributeValue("class", parser.allNames[0].classAtr) }
+				.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
 
 			ParsedProduct(
 				name = name,
@@ -104,7 +109,13 @@ class WebParserService {
 			val nameFilter = { it: TextNode -> it.text().contains(parseInfo.name!!) }
 			val parsedProductNames: List<ParsedProductName> = getNodes(allElements, nameFilter).map {
 				val nameElement = it as Element
-				ParsedProductName(0, nameElement.ownText(), nameElement.id(), nameElement.className())
+				val parsedProductName = ParsedProductName(
+					value = nameElement.ownText(),
+					idAtr = nameElement.id(),
+					classAtr = nameElement.className()
+				)
+				repository.saveParsedProductName(parsedProductName)
+				parsedProductName
 			}
 
 			val priceFilter = { it: TextNode ->
@@ -114,11 +125,13 @@ class WebParserService {
 			}
 			val parsedProductPrices = getNodes(allElements, priceFilter).map {
 				val priceElement = it as Element
-				ParsedProductPrice(
+				val parsedProductPrice = ParsedProductPrice(
 					strValue = priceElement.ownText(),
 					idAtr = priceElement.id(),
 					classAtr = priceElement.className()
 				)
+				repository.saveParsedProductPrice(parsedProductPrice)
+				parsedProductPrice
 			}
 
 			val host = URI(document.location()).host

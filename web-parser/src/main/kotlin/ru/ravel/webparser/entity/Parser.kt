@@ -8,42 +8,26 @@ import org.hibernate.annotations.OnDeleteAction
 @Table(name = "parser")
 data class Parser(
 	@Id
-	@GeneratedValue(strategy= GenerationType.IDENTITY)
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	@Column(name = "id")
-	var id: Long?  = null,
+	var id: Long? = null,
 
-	@OneToMany(
-		cascade = [CascadeType.ALL],
-		orphanRemoval = true,
-		fetch = FetchType.EAGER,
-		targetEntity = ParsedProductName::class
-	)
+	@OneToMany(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
 	@OnDelete(action = OnDeleteAction.CASCADE)
-	@JoinColumn(name = "names")
-//	@Column(name = "all_names")
-//	@Transient
+	@JoinColumn(name = "parser_id")
 	var allNames: List<ParsedProductName> = mutableListOf(),
 
-	@OneToOne
-//	@PrimaryKeyJoinColumn
-//	@Transient
+	@OneToOne(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
+	@OnDelete(action = OnDeleteAction.CASCADE)
 	var selectedName: ParsedProductName = ParsedProductName(),
 
-	@OneToMany(
-		cascade = [CascadeType.ALL],
-		orphanRemoval = true,
-		fetch = FetchType.EAGER,
-		targetEntity = ParsedProductPrice::class
-	)
+	@OneToMany(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
 	@OnDelete(action = OnDeleteAction.CASCADE)
-	@JoinColumn(name = "prices")
-//	@Column(name = "price")
-//	@Transient
+	@JoinColumn(name = "parser_id")
 	var allPrices: List<ParsedProductPrice> = mutableListOf(),
 
-//	@Transient
-	@OneToOne
-//	@PrimaryKeyJoinColumn
+	@OneToOne(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
+	@OnDelete(action = OnDeleteAction.CASCADE)
 	var selectedPrice: ParsedProductPrice = ParsedProductPrice(),
 
 	@Column(name = "store_url")

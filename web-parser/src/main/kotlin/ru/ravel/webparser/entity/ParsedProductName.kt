@@ -10,6 +10,7 @@ data class ParsedProductName(
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
 	var id: Long? = null,
 
+	@Transient
 	var value: String = "",
 
 	var idAtr: String = "",
