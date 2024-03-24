@@ -19,7 +19,7 @@ data class Parser(
 
 	@OneToOne(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
 	@OnDelete(action = OnDeleteAction.CASCADE)
-	var selectedName: ParsedProductName = ParsedProductName(),
+	var selectedName: ParsedProductName? = null,
 
 	@OneToMany(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
 	@OnDelete(action = OnDeleteAction.CASCADE)
@@ -28,7 +28,7 @@ data class Parser(
 
 	@OneToOne(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
 	@OnDelete(action = OnDeleteAction.CASCADE)
-	var selectedPrice: ParsedProductPrice = ParsedProductPrice(),
+	var selectedPrice: ParsedProductPrice? = null,
 
 	@Column(name = "store_url")
 	var storeUrl: String = ""

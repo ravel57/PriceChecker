@@ -22,9 +22,9 @@ class Repository(
 	private val sessionFactory: SessionFactory = factory.unwrap(SessionFactory::class.java)
 
 
-	fun isStoreParserExist(url: String): Boolean {
-		return entityManager.createQuery("select count (storeUrl) > 0 from Parser where storeUrl = :url")
-			.setParameter("url", url)
+	fun isStoreParserExist(storeUrl: String): Boolean {
+		return entityManager.createQuery("select count (storeUrl) > 0 from Parser where storeUrl = :storeUrl")
+			.setParameter("storeUrl", storeUrl)
 			.resultList.first() as Boolean
 	}
 

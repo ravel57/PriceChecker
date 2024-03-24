@@ -20,12 +20,12 @@ class PriceCheckerService {
 
 	Result getInfo(ParseInfo info) {
 		String json = new Gson().toJson(info)
-		HttpResponse<String> response = sendRequest(json, "http://localhost:8765/web-parser/parse-by-parse-info")
+		HttpResponse<String> response = sendRequest(json, "http://localhost:8765/web-parser/parse-by-info")
 		return handleResponse(response)
 	}
 
 	Result getInfo(String url) {
-		HttpResponse<String> response = sendRequest(url, "http://localhost:8765/web-parser/parse")
+		HttpResponse<String> response = sendRequest(url, "http://localhost:8765/web-parser/parse-by-url")
 		return handleResponse(response)
 	}
 
@@ -36,7 +36,8 @@ class PriceCheckerService {
 				new Result(true, parseInfo)
 			}
 			case HttpStatus.SC_NOT_FOUND -> {
-				new Result(false, null)
+				Map map = new Gson().fromJson(response.body(), Map.class)
+				new Result(false, map)
 			}
 			case HttpStatus.SC_INTERNAL_SERVER_ERROR -> {
 				logger.error("INTERNAL_SERVER_ERROR")
@@ -46,18 +47,24 @@ class PriceCheckerService {
 	}
 
 	TelegramUser saveNewUser(TelegramUser telegramUser) {
-		HttpResponse<String> response = sendRequest("", "http://localhost:8765/web-parser/parse")
+		HttpResponse<String> response = sendRequest("", "http://localhost:8765/web-parser/parse-by-url")
 		/*telegramUser.id = */ new Gson().fromJson(response.body(), ParseInfo.class)
 		return telegramUser
 	}
 
 	class Result {
 		boolean isHavingParser
-		ParseInfo result
+		ParseInfo parseInfoResult
+		Map mapResult
 
-		Result(boolean isHavingParser, ParseInfo result) {
+		Result(boolean isHavingParser, ParseInfo parseInfoResult) {
 			this.isHavingParser = isHavingParser
-			this.result = result
+			this.parseInfoResult = parseInfoResult
+		}
+
+		Result(boolean isHavingParser, Map mapResult) {
+			this.isHavingParser = isHavingParser
+			this.mapResult = mapResult
 		}
 	}
 

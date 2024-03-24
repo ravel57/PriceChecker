@@ -94,7 +94,7 @@ class TelegramService {
 					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
 					telegramUser.currentState = State.NONE
 					SendMessage request = new SendMessage(telegramUser.telegramId,
-							"<b>Готово!</b>\n\n${info.result.name}\n\n${info.result.price}")
+							"<b>Готово!</b>\n\n${info.parseInfoResult.name}\n\n${info.parseInfoResult.price}")
 							.parseMode(ParseMode.HTML)
 					sendMessage(request, telegramUser.telegramId)
 					sendGreetingMessage(telegramUser.telegramId)
@@ -132,7 +132,7 @@ class TelegramService {
 					telegramUser.currentState = State.NONE
 					logger.debug(messageText) /*Price*/
 					SendMessage request = new SendMessage(telegramUser.telegramId,
-							"<b>Настройка персера завершена!</b>\n\n${info.result.name}\n\n${info.result.price}")
+							"<b>Настройка персера завершена!</b>\n\n${info.parseInfoResult.name}\n\n${info.parseInfoResult.price}")
 							.parseMode(ParseMode.HTML)
 					sendMessage(request, telegramUser.telegramId)
 					sendGreetingMessage(telegramUser.telegramId)

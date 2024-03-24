@@ -8,7 +8,8 @@ import org.hibernate.annotations.OnDeleteAction
 @Table(name = "parser_users")
 data class User(
 	@Id
-	var id: Long = -1,
+	@GeneratedValue(strategy = GenerationType.IDENTITY)
+	var id: Long? = null,
 
 	@OneToMany(
 		cascade = [CascadeType.ALL],

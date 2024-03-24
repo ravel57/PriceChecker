@@ -18,25 +18,42 @@ class MainController(
 
 	val logger = LoggerFactory.getLogger(this::class.java)
 
-	@PostMapping("/parse")
+	@PostMapping("/parse-by-url")
 	fun getProductByUrl(@RequestBody url: String): ResponseEntity<Any> {
 		return try {
 			ResponseEntity.ok().body(parserService.getProduct(url))
 		} catch (e: ParserDoesntExistException) {
 			logger.error(e.message, e)
-			ResponseEntity.status(HttpStatus.NOT_FOUND).build()
+			ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.message)
 		} catch (e: Exception) {
+			logger.error(e.message, e)
 			ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
 		}
 	}
 
-	@PostMapping("/parse-by-parse-info")
+	@PostMapping("/parse-by-info")
 	fun getProductByInfo(@RequestBody parseInfo: ParseInfo): ResponseEntity<Any> {
 		return try {
 			ResponseEntity.ok().body(parserService.getProduct(parseInfo))
-		} catch (e: InternalException) {
-			ResponseEntity.status(HttpStatus.NOT_FOUND).body(e)
+		} catch (e: ParserDoesntExistException) {
+			logger.error(e.message, e)
+			ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.payload)
+		} catch (e: Exception) {
+			logger.error(e.message, e)
+			ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
 		}
+	}
+
+
+	@PostMapping("/set-name-atr")
+	fun setNameAtr(nameAtr: String, userID: Long) {
+		ResponseEntity.ok().body(parserService.setNameAtr(nameAtr, userID))
+	}
+
+
+	@PostMapping("/set-price-atr")
+	fun setPriceAtr(priceAtr: String, userID: Long) {
+		ResponseEntity.ok().body(parserService.setPriceAtr(priceAtr, userID))
 	}
 
 }
