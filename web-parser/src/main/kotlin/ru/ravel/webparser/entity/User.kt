@@ -1,4 +1,4 @@
-package ru.ravel.webparser.dto
+package ru.ravel.webparser.entity
 
 import jakarta.persistence.*
 import org.hibernate.annotations.OnDelete

@@ -1,6 +1,7 @@
 package ru.ravel.webparser.services
 
 
+import ru.ravel.core.dto.ParseInfo
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
@@ -11,8 +12,9 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.stereotype.Service
 import ru.ravel.webparser.exception.ParserDoesntExistException
-import ru.ravel.webparser.dto.*
+import ru.ravel.webparser.entity.*
 import ru.ravel.webparser.repository.Repository
+import ru.ravel.webparser.repository.WebRepository
 import java.io.IOException
 import java.net.URI
 import java.util.*
@@ -23,6 +25,8 @@ class WebParserService {
 
 	@Autowired
 	private lateinit var repository: Repository
+	@Autowired
+	private lateinit var repository2: WebRepository
 
 	@Autowired
 	private lateinit var kafka: KafkaTemplate<Long, ParsedProduct>
@@ -37,7 +41,7 @@ class WebParserService {
 			throw ParserDoesntExistException("parser not exist for selected store")
 		}
 		val parsedProduct: ParsedProduct = getByJSoup(url, parser)
-		kafka.send("product-price-changed-event", parsedProduct.id, parsedProduct).whenCompleteAsync { result, ex ->
+		kafka.send("product-price-changed-event", parsedProduct.id!!, parsedProduct).whenCompleteAsync { result, ex ->
 			if (ex == null)
 				logger.info(result.toString())
 			else
@@ -47,13 +51,16 @@ class WebParserService {
 	}
 
 	fun getProduct(parseInfo: ParseInfo): ParsedProduct {
-		val parser = if (repository.isStoreParserExist(parseInfo.url)) {
-			getParserByJSoup(url = parseInfo.url, searchPrice = parseInfo.price, searchName = parseInfo.name)
+		val parser = if (!repository.isStoreParserExist(parseInfo.url!!)) {
+			val parser = getParserByJSoup(parseInfo)
+			repository2.save(parser)
+			parser
 		} else {
-			throw ParserDoesntExistException("parser does not exist for selected store")
+			repository.getParser(parseInfo.url!!)
 		}
-		val parsedProduct: ParsedProduct = getByJSoup(parseInfo.url, parser)
-		kafka.send("product-price-changed-event", parsedProduct.id, parsedProduct)
+
+		val parsedProduct: ParsedProduct = getByJSoup(parseInfo.url!!, parser)
+		kafka.send("product-price-changed-event", parsedProduct.id!!, parsedProduct)
 			.whenCompleteAsync { result, ex ->
 				if (ex == null) {
 					logger.info(result.toString())
@@ -89,12 +96,12 @@ class WebParserService {
 
 
 	@Throws(ParserDoesntExistException::class)
-	private fun getParserByJSoup(url: String, searchPrice: String, searchName: String): Parser {
+	private fun getParserByJSoup(parseInfo: ParseInfo): Parser {
 		return try {
-			val document = Jsoup.connect(url).followRedirects(true).timeout(60000).get()
+			val document = Jsoup.connect(parseInfo.url!!).followRedirects(true).timeout(60000).get()
 			val allElements = document.body().allElements
 
-			val nameFilter = { it: TextNode -> it.text().contains(searchName) }
+			val nameFilter = { it: TextNode -> it.text().contains(parseInfo.name!!) }
 			val parsedProductNames: List<ParsedProductName> = getNodes(allElements, nameFilter).map {
 				val nameElement = it as Element
 				ParsedProductName(0, nameElement.ownText(), nameElement.id(), nameElement.className())
@@ -102,7 +109,7 @@ class WebParserService {
 
 			val priceFilter = { it: TextNode ->
 				val replace = it.text().replace(',', '.').replace("[^0-9.]".toRegex(), "")
-				val replace1 = searchPrice.replace(',', '.').replace("[^0-9.]".toRegex(), "")
+				val replace1 = parseInfo.price!!.replace(',', '.').replace("[^0-9.]".toRegex(), "")
 				replace == replace1
 			}
 			val parsedProductPrices = getNodes(allElements, priceFilter).map {

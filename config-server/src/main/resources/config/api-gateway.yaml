@@ -1,16 +1,21 @@
 spring:
   cloud:
     gateway:
+      routes:
+        - id: parse
+          uri: lb://web-parser
+          predicates:
+            - Path=/parse
+            - Method=POST
+        - id: parse-by-parse-info
+          uri: lb://web-parser
+          predicates:
+            - Path=/parse-by-parse-info
+            - Method=POST
       discovery:
         locator:
           enabled: true
           lower-case-service-id: true
-      routes:
-        - id: test
-          uri: lb://EurekaClient
-          predicates:
-            - Path=/client/test
-            - Method=GET
   main:
     web-application-type: reactive
 

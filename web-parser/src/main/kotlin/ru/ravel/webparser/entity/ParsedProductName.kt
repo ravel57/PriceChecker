@@ -1,4 +1,4 @@
-package ru.ravel.webparser.dto
+package ru.ravel.webparser.entity
 
 import jakarta.persistence.*
 
@@ -8,7 +8,7 @@ data class ParsedProductName(
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	var id: Long = -1,
+	var id: Long? = null,
 
 	var value: String = "",
 

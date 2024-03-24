@@ -5,7 +5,6 @@ import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
 import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.model.request.ParseMode
-import com.pengrad.telegrambot.request.AnswerCallbackQuery
 import com.pengrad.telegrambot.request.DeleteMessage
 import com.pengrad.telegrambot.request.EditMessageText
 import com.pengrad.telegrambot.request.SendMessage
@@ -14,18 +13,18 @@ import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
+import ru.ravel.core.dto.ParseInfo
 import ru.ravel.telegramservice.dto.Command
 import ru.ravel.telegramservice.dto.State
-import ru.ravel.telegramservice.dto.TelegramUser
+import ru.ravel.telegramservice.entity.TelegramUser
 import ru.ravel.telegramservice.repository.TelegramUserRepository
-
 
 @Service
 class TelegramService {
 
 	private Logger logger = LoggerFactory.getLogger(this.class)
 
-	private TelegramBot bot = new TelegramBot(System.getenv("bot_token"))
+	private TelegramBot bot
 
 	@Autowired
 	private TelegramUserRepository repository
@@ -34,6 +33,7 @@ class TelegramService {
 	private PriceCheckerService checkerService
 
 	TelegramService() {
+		bot = new TelegramBot(System.getenv("bot_token"))
 		bot.setUpdatesListener(listener, exceptionHandler)
 	}
 
@@ -42,49 +42,62 @@ class TelegramService {
 
 		@Override
 		int process(List<Update> updates) {
-			updates.each { update ->
-				Long telegramId
-				TelegramUser telegramUser
+			try {
+				updates.each { update ->
+					Long telegramId
+					TelegramUser telegramUser
 
-				if (update?.message()) {
-					telegramId = update.message().from().id()
-					telegramUser = repository.getByTelegramId(telegramId)
+					if (update?.message()) {
+						telegramId = update.message().from().id()
+						telegramUser = repository.getByTelegramId(telegramId)
 
-					if (telegramUser == null) {
-						telegramUser = repository.save(new TelegramUser(telegramId))
-					}
-					String message = update.message().text()
-					telegramUser.lastUserMessageId = update.message().messageId()
-					repository.save(telegramUser)
-
-					if (update?.message()?.text() && message.startsWith('/')) {
-						switch (Command.getByCommand(message)) {
-							case Command.START -> {
-								sendGreetingMessage(telegramId)
-							}
+						if (telegramUser == null) {
+							telegramUser = repository.save(new TelegramUser(telegramId))
 						}
-					} else {
-						stateWorker(telegramId, message)
+						String messageText = update.message().text()
+						telegramUser.lastUserMessageId = update.message().messageId()
+						repository.save(telegramUser)
+
+						if (update?.message()?.text() && messageText.startsWith('/')) {
+							switch (Command.getByCommand(messageText)) {
+								case Command.START -> {
+									sendGreetingMessage(telegramId)
+								}
+							}
+						} else {
+							if (telegramUser.parseInfo == null) {
+								telegramUser.parseInfo = new ParseInfo()
+							}
+							stateWorker(telegramUser, messageText)
+						}
+					} else if (update?.callbackQuery()) {
+						telegramId = update.callbackQuery().from().id()
+						telegramUser = repository.getByTelegramId(telegramId)
+						handleCallback(update, telegramUser)
 					}
-				} else if (update?.callbackQuery()) {
-					telegramId = update.callbackQuery().from().id()
-					telegramUser = repository.getByTelegramId(telegramId)
-					handleCallback(update, telegramUser)
 				}
+			} catch (e) {
+				logger.error(e.message, e)
 			}
 			return UpdatesListener.CONFIRMED_UPDATES_ALL
 		}
-
 	}
 
 
-	void stateWorker(Long telegramId, String messageText) {
-		TelegramUser telegramUser = repository.getByTelegramId(telegramId)
-
+	void stateWorker(TelegramUser telegramUser, String messageText) {
 		String text = switch (telegramUser.currentState) {
 			case State.LINK_ADDING -> {
+				telegramUser.parseInfo.url = messageText
 				PriceCheckerService.Result info = checkerService.getInfo(messageText)
-				if (!info.isHavingParser) {
+				if (info.isHavingParser) {
+					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
+					telegramUser.currentState = State.NONE
+					SendMessage request = new SendMessage(telegramUser.telegramId, "<b>Готово!</b>")
+							.parseMode(ParseMode.HTML)
+					sendMessage(request, telegramUser.telegramId)
+					sendGreetingMessage(telegramUser.telegramId)
+					""
+				} else {
 					telegramUser.currentState = State.NAME_ADDING
 					logger.debug(messageText) /*URL*/
 					editMessage(
@@ -93,18 +106,11 @@ class TelegramService {
 							"Пришли <u>ссылку</u> на товар\n<b><i>$messageText</i></b> - принято✅"
 					)
 					"<b>Парсер нужо настроить</b>\nПришли <i><u>полное название</u></i> товара со страницы"
-				} else {
-					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
-					telegramUser.currentState = State.NONE
-					SendMessage request = new SendMessage(telegramUser.telegramId, "<b>Готово!</b>")
-							.parseMode(ParseMode.HTML)
-					sendMessage(request, telegramUser.telegramId)
-					sendGreetingMessage(telegramUser.telegramId)
-					""
 				}
 			}
 
 			case State.NAME_ADDING -> {
+				telegramUser.parseInfo.name = messageText
 				telegramUser.currentState = State.PRICE_ADDING
 				logger.debug(messageText) /*Name*/
 				editMessage(
@@ -119,27 +125,29 @@ class TelegramService {
 			}
 
 			case State.PRICE_ADDING -> {
-				telegramUser.currentState = State.NONE
-				logger.debug(messageText) /*Price*/
-				editMessage(
-						telegramUser.telegramId,
-						telegramUser.lastBotMessageId,
-						"Напиши цену этого товара сейчас\n<b><i>$messageText</i></b> - принято✅"
-				)
-				SendMessage request = new SendMessage(telegramUser.telegramId,
-						"<b>Настройка персера завершена!</b>")
-						.parseMode(ParseMode.HTML)
-				sendMessage(request, telegramUser.telegramId)
-				sendGreetingMessage(telegramUser.telegramId)
+				telegramUser.parseInfo.price = messageText
+				PriceCheckerService.Result info = checkerService.getInfo(telegramUser.parseInfo)
+				if (info.isHavingParser) {
+					editMessage(
+							telegramUser.telegramId,
+							telegramUser.lastBotMessageId,
+							"Напиши цену этого товара сейчас\n<b><i>$messageText</i></b> - принято✅"
+					)
+					telegramUser.currentState = State.NONE
+					logger.debug(messageText) /*Price*/
+					SendMessage request = new SendMessage(telegramUser.telegramId, "<b>Настройка персера завершена!</b>")
+							.parseMode(ParseMode.HTML)
+					sendMessage(request, telegramUser.telegramId)
+					sendGreetingMessage(telegramUser.telegramId)
+				}
 				""
 			}
-
 		}
 		repository.save(telegramUser)
 		if (telegramUser.currentState != State.NONE) {
 			SendMessage request = new SendMessage(telegramUser.telegramId, text)
 					.parseMode(ParseMode.HTML)
-			sendMessage(request, telegramId)
+			sendMessage(request, telegramUser.telegramId)
 		}
 	}
 
@@ -199,7 +207,7 @@ class TelegramService {
 
 				case State.SHOW_ITEMS -> {
 					ArrayList<String> items = ["iPhone 11 Pro", "Samsung S24 Ultra", "Казантип 2009",
-											   "Завод по производству алюминиевых ведер", "Казахи", "Нагетсы", "Шины 12``"]
+											   "Завод по производству алюминиевых ведер", "Казахи", "Нагетсы", "Шины 12\""]
 					String text = "<i><b>Твои записи:</b></i>\n\n"
 					for (item in items) {
 						Integer itemCount = items.indexOf(item) + 1

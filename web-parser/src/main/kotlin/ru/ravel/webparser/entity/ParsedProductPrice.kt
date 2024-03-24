@@ -1,9 +1,6 @@
-package ru.ravel.webparser.dto
+package ru.ravel.webparser.entity
 
 import jakarta.persistence.*
-import lombok.AllArgsConstructor
-import lombok.Data
-import lombok.NoArgsConstructor
 
 @Entity
 @Table(name = "parsed_product_price")
@@ -11,7 +8,7 @@ data class ParsedProductPrice(
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	var id: Long = -1,
+	var id: Long? = null,
 
 	var strValue: String = "0",
 

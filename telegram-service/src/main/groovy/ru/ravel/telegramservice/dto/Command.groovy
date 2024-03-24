@@ -3,7 +3,7 @@ package ru.ravel.telegramservice.dto
 enum Command {
 	START("/start")
 
-	private command
+	private String command
 
 	Command(String command) {
 		this.command = command

@@ -1,14 +1,15 @@
 package ru.ravel.webparser.controller
 
+import com.sun.jdi.InternalException
 import org.springframework.http.HttpStatus
 import org.springframework.http.ResponseEntity
 import org.springframework.web.bind.annotation.PostMapping
 import org.springframework.web.bind.annotation.RequestBody
 import org.springframework.web.bind.annotation.RestController
-import ru.ravel.webparser.dto.ParseInfo
+import ru.ravel.core.dto.ParseInfo
 import ru.ravel.webparser.services.WebParserService
 
-@RestController
+@RestController("")
 class MainController(
 	var parserService: WebParserService,
 ) {
@@ -26,7 +27,7 @@ class MainController(
 	fun getProductByInfo(@RequestBody parseInfo: ParseInfo): ResponseEntity<Any> {
 		return try {
 			ResponseEntity.ok().body(parserService.getProduct(parseInfo))
-		} catch (e: Exception) {
+		} catch (e: InternalException) {
 			ResponseEntity.status(HttpStatus.NOT_FOUND).body(e)
 		}
 	}

@@ -1,4 +1,4 @@
-package ru.ravel.webparser.dto
+package ru.ravel.webparser.entity
 
 import jakarta.persistence.*
 import org.hibernate.annotations.OnDelete
@@ -8,8 +8,9 @@ import org.hibernate.annotations.OnDeleteAction
 @Table(name = "parser")
 data class Parser(
 	@Id
+	@GeneratedValue(strategy= GenerationType.IDENTITY)
 	@Column(name = "id")
-	var id: Long  = -1,
+	var id: Long?  = null,
 
 	@OneToMany(
 		cascade = [CascadeType.ALL],
@@ -18,11 +19,14 @@ data class Parser(
 		targetEntity = ParsedProductName::class
 	)
 	@OnDelete(action = OnDeleteAction.CASCADE)
-	@JoinColumn(name = "parsed_product_name")
-	@Column(name = "all_names")
+	@JoinColumn(name = "names")
+//	@Column(name = "all_names")
+//	@Transient
 	var allNames: List<ParsedProductName> = mutableListOf(),
 
 	@OneToOne
+//	@PrimaryKeyJoinColumn
+//	@Transient
 	var selectedName: ParsedProductName = ParsedProductName(),
 
 	@OneToMany(
@@ -32,11 +36,14 @@ data class Parser(
 		targetEntity = ParsedProductPrice::class
 	)
 	@OnDelete(action = OnDeleteAction.CASCADE)
-	@JoinColumn(name = "parsed_product_price")
-	@Column(name = "price")
+	@JoinColumn(name = "prices")
+//	@Column(name = "price")
+//	@Transient
 	var allPrices: List<ParsedProductPrice> = mutableListOf(),
 
+//	@Transient
 	@OneToOne
+//	@PrimaryKeyJoinColumn
 	var selectedPrice: ParsedProductPrice = ParsedProductPrice(),
 
 	@Column(name = "store_url")
