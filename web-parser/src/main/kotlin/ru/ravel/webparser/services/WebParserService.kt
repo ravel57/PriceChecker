@@ -58,8 +58,8 @@ class WebParserService(
 			val parser = getParserByJSoup(parseInfo)
 			repository.saveParser(parser)
 			val map = mapOf(
-				Pair("names", parser.allNames.map { it.classAtr }),
-				Pair("prices", parser.allPrices.map { it.classAtr })
+				Pair("names", parser.allNames),
+				Pair("prices", parser.allPrices)
 			)
 			throw ParserDoesntExistException("parser not specified for attributes", map)
 		}
