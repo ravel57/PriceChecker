@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 import ru.ravel.core.dto.ParseInfo
 import ru.ravel.telegramservice.dto.Command
+import ru.ravel.telegramservice.dto.CallbackMode
 import ru.ravel.telegramservice.dto.State
 import ru.ravel.telegramservice.entity.TelegramUser
 import ru.ravel.telegramservice.repository.TelegramUserRepository
@@ -85,6 +86,30 @@ class TelegramService {
 	}
 
 
+	static SendMessage messageAskToUser(
+			String enterText,
+			TelegramUser telegramUser,
+			List variables,
+			String mode
+	) {
+		String vars = "$enterText\n\n"
+
+		for (variable in variables) {
+			Integer itemCounter = variables.indexOf(variable) + 1
+			vars += "<b>${itemCounter}.</b> $variable\n"
+		}
+
+		def buttons = variables.collect { item ->
+			new InlineKeyboardButton("${variables.indexOf(item) + 1}")
+					.callbackData("$mode=${item}")
+		}
+
+		return new SendMessage(telegramUser.telegramId, vars)
+				.parseMode(ParseMode.HTML)
+				.replyMarkup(keyboardBuilder(buttons, 2))
+	}
+
+
 	void stateWorker(TelegramUser telegramUser, String messageText) {
 		String text = switch (telegramUser.currentState) {
 			case State.LINK_ADDING -> {
@@ -120,6 +145,15 @@ class TelegramService {
 						|<b><i>$messageText</i></b> - принято✅
 						""".stripMargin())
 				"Напиши цену этого товара сейчас"
+				sendMessage(
+						messageAskToUser(
+								"Что больше похоже на класс названия?",
+								telegramUser,
+								["daniel", "coolerDaniel_title"],
+								CallbackMode.CLASS_NAME_ART.name()
+						),
+						telegramUser.telegramId
+				)
 			}
 
 			case State.PRICE_ADDING -> {
@@ -147,6 +181,65 @@ class TelegramService {
 			SendMessage request = new SendMessage(telegramUser.telegramId, text)
 					.parseMode(ParseMode.HTML)
 			sendMessage(request, telegramUser.telegramId)
+		}
+	}
+
+	private void handleCallback(Update update, TelegramUser telegramUser) {
+		String callData = update.callbackQuery().data()
+		telegramUser.callbackQueryId = update.callbackQuery().id()
+		telegramUser.lastBotMessageId = update.callbackQuery().message().messageId()
+		repository.save(telegramUser)
+		if (callData.startsWith("CLASS")) {
+			switch (CallbackMode.valueOf(callData.split("=")[0])) {
+
+				case CallbackMode.CLASS_PRICE_ART -> {
+					telegramUser.parseInfo.priceClassArt = callData.split("=")[-1]
+				}
+
+				case CallbackMode.CLASS_NAME_ART -> {
+					telegramUser.parseInfo.nameClassArt = callData.split("=")[-1]
+				}
+			}
+			repository.save(telegramUser)
+
+		} else if (!callData.startsWith("del") && !callData.startsWith("back")) {
+			switch (State.valueOf(callData)) {
+				case State.LINK_ADDING -> {
+					String text = "Пришли <u>ссылку</u> на товар"
+					telegramUser.currentState = State.LINK_ADDING
+					repository.save(telegramUser)
+					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text)
+				}
+
+				case State.SHOW_ITEMS -> {
+					ArrayList<String> items = ["iPhone 11 Pro", "Samsung S24 Ultra", "Казантип 2009",
+											   "Завод по производству алюминиевых ведер", "Казахи", "Нагетсы", "Шины 12\""]
+					String text = "<i><b>Твои записи:</b></i>\n\n"
+					for (item in items) {
+						Integer itemCount = items.indexOf(item) + 1
+						text += "$itemCount. $item\n"
+					}
+					def buttons = items.collect { item ->
+						new InlineKeyboardButton("❌ ${items.indexOf(item) + 1}")
+								.callbackData("del=${items.indexOf(item) + 1}")
+					}
+
+					def inlineKeyboard = keyboardBuilder(buttons, 3)
+					inlineKeyboard.addRow(new InlineKeyboardButton("Назад")
+							.callbackData("back"))
+					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text, inlineKeyboard)
+				}
+
+				default -> {
+				}
+			}
+		} else if (callData.startsWith("del")) {
+			logger.debug(callData) /*тут должно быть удаление записи*/
+
+		} else if (callData.startsWith("back")) {
+			deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
+			sendGreetingMessage(telegramUser.telegramId)
+
 		}
 	}
 
@@ -189,53 +282,15 @@ class TelegramService {
 		}
 	}
 
-	private void handleCallback(Update update, TelegramUser telegramUser) {
-		String callData = update.callbackQuery().data()
-		telegramUser.callbackQueryId = update.callbackQuery().id()
-		telegramUser.lastBotMessageId = update.callbackQuery().message().messageId()
-		repository.save(telegramUser)
-
-		if (!callData.startsWith("del") && !callData.startsWith("back")) {
-			switch (State.valueOf(callData)) {
-				case State.LINK_ADDING -> {
-					String text = "Пришли <u>ссылку</u> на товар"
-					telegramUser.currentState = State.LINK_ADDING
-					repository.save(telegramUser)
-					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text)
-				}
-
-				case State.SHOW_ITEMS -> {
-					ArrayList<String> items = ["iPhone 11 Pro", "Samsung S24 Ultra", "Казантип 2009",
-											   "Завод по производству алюминиевых ведер", "Казахи", "Нагетсы", "Шины 12\""]
-					String text = "<i><b>Твои записи:</b></i>\n\n"
-					for (item in items) {
-						Integer itemCount = items.indexOf(item) + 1
-						text += "$itemCount. $item\n"
-					}
-					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text, itemsKeyboard(items))
-				}
-
-				default -> {
-				}
-			}
-		} else if (callData.startsWith("del")) {
-			logger.debug(callData) /*тут должно быть удаление записи*/
-		} else if (callData.startsWith("back")) {
-			deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
-			sendGreetingMessage(telegramUser.telegramId)
-		}
-	}
-
-	static InlineKeyboardMarkup itemsKeyboard(ArrayList<String> items) {
-		def buttons = items.collect { item ->
-			new InlineKeyboardButton("❌ ${items.indexOf(item) + 1}")
-					.callbackData("del=${items.indexOf(item) + 1}")
-		}
+	static InlineKeyboardMarkup keyboardBuilder(
+			List<InlineKeyboardButton> buttons,
+			Integer offset
+	) {
 		def inlineKeyboard = new InlineKeyboardMarkup()
 		def row = []
 		buttons.each { button ->
 			row.add(button)
-			if (row.size() == 3) {
+			if (row.size() == offset) {
 				inlineKeyboard.addRow(row as InlineKeyboardButton[])
 				row = []
 			}
@@ -243,8 +298,6 @@ class TelegramService {
 		if (!row.isEmpty()) {
 			inlineKeyboard.addRow(row as InlineKeyboardButton[])
 		}
-		inlineKeyboard.addRow(new InlineKeyboardButton("Назад")
-				.callbackData("back"))
 		return inlineKeyboard
 	}
 
@@ -264,14 +317,6 @@ class TelegramService {
 		}
 		bot.execute(editedMessage)
 	}
-
-//	Это тот самый popup alert (только вот заюзать я его не смог)
-//	void showAlert(TelegramUser telegramUser) {
-//		AnswerCallbackQuery request = new AnswerCallbackQuery(telegramUser.callbackQueryId)
-//				.text("Настройка завершена")
-//				.showAlert(true)
-//		bot.execute(request)
-//	}
 
 	void sendMessage(SendMessage request, Long telegramId) {
 		SendResponse response = bot.execute(request)
