@@ -5,5 +5,6 @@ data class ParseInfo(
 	var name: String? = null,
 	var price: String? = null,
 	var userId: Long? = null,
-	var classArt: String? = null,
+	var priceClassArt: String? = null,
+	var nameClassArt: String? = null,
 )
