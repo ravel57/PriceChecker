@@ -22,15 +22,15 @@ class Repository(
 	private val sessionFactory: SessionFactory = factory.unwrap(SessionFactory::class.java)
 
 
-	fun isStoreParserExist(storeUrl: String): Boolean {
-		return entityManager.createQuery("select count (storeUrl) > 0 from Parser where storeUrl = :storeUrl")
-			.setParameter("storeUrl", storeUrl)
+	fun isStoreParserExist(storeHostUrl: String): Boolean {
+		return entityManager.createQuery("select count (storeUrl) > 0 from Parser where storeUrl = :storeHostUrl")
+			.setParameter("storeHostUrl", storeHostUrl)
 			.resultList.first() as Boolean
 	}
 
-	fun getParser(storeUrl: String) : Parser {
-		return entityManager.createQuery("from Parser where storeUrl = :storeUrl")
-			.setParameter("storeUrl", storeUrl)
+	fun getParser(storeHostUrl: String) : Parser {
+		return entityManager.createQuery("from Parser where storeUrl = :storeHostUrl")
+			.setParameter("storeHostUrl", storeHostUrl)
 			.resultList.first() as Parser
 	}
 

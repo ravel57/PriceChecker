@@ -15,7 +15,7 @@ data class Parser(
 	@OneToMany(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
 	@OnDelete(action = OnDeleteAction.CASCADE)
 	@JoinColumn(name = "parser_id")
-	var allNames: List<ParsedProductName> = mutableListOf(),
+	var allNames: List<ParsedProductName>? = null,
 
 	@OneToOne(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
 	@OnDelete(action = OnDeleteAction.CASCADE)
@@ -24,7 +24,7 @@ data class Parser(
 	@OneToMany(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
 	@OnDelete(action = OnDeleteAction.CASCADE)
 	@JoinColumn(name = "parser_id")
-	var allPrices: List<ParsedProductPrice> = mutableListOf(),
+	var allPrices: List<ParsedProductPrice>? = null,
 
 	@OneToOne(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
 	@OnDelete(action = OnDeleteAction.CASCADE)

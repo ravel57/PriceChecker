@@ -1,6 +1,7 @@
 package ru.ravel.webparser.entity
 
 import jakarta.persistence.*
+import ru.ravel.core.util.stringToDouble
 
 @Entity
 @Table(name = "parsed_product_price")
@@ -13,7 +14,7 @@ data class ParsedProductPrice(
 	var strValue: String = "0",
 
 	@Transient
-	var value: Double = strValue.replace(',', '.').replace("[^0-9.]".toRegex(), "").toDouble(),
+	var value: Double = stringToDouble(strValue),
 
 	var idAtr: String = "",
 

@@ -40,7 +40,6 @@ class TelegramService {
 
 
 	private UpdatesListener listener = new UpdatesListener() {
-
 		@Override
 		int process(List<Update> updates) {
 			try {
@@ -70,12 +69,12 @@ class TelegramService {
 							if (telegramUser.parseInfo == null) {
 								telegramUser.parseInfo = new ParseInfo()
 							}
-							stateWorker(telegramUser, messageText)
+							stateHandler(telegramUser, messageText)
 						}
 					} else if (update?.callbackQuery()) {
 						telegramId = update.callbackQuery().from().id()
 						telegramUser = repository.getByTelegramId(telegramId)
-						handleCallback(update, telegramUser)
+						callbackHandler(update, telegramUser)
 					}
 				}
 			} catch (e) {
@@ -86,40 +85,30 @@ class TelegramService {
 	}
 
 
-	static SendMessage messageAskToUser(
-			String enterText,
-			TelegramUser telegramUser,
-			List variables,
-			String mode
-	) {
+	static SendMessage messageAskToUser(String enterText, TelegramUser telegramUser, List<String> variables, String mode) {
 		String vars = "$enterText\n\n"
-
-		for (variable in variables) {
-			Integer itemCounter = variables.indexOf(variable) + 1
-			vars += "<b>${itemCounter}.</b> $variable\n"
+		vars += variables.indexed()
+				.collect { index, variable -> "<b>[${index + 1}]</b>\n$variable" }
+				.join('\n\n')
+		def buttons = variables.indexed().collect { index, item ->
+			new InlineKeyboardButton(index + 1 as String).callbackData("$mode=$item")
 		}
-
-		def buttons = variables.collect { item ->
-			new InlineKeyboardButton("${variables.indexOf(item) + 1}")
-					.callbackData("$mode=${item}")
-		}
-
 		return new SendMessage(telegramUser.telegramId, vars)
 				.parseMode(ParseMode.HTML)
 				.replyMarkup(keyboardBuilder(buttons, 2))
 	}
 
 
-	void stateWorker(TelegramUser telegramUser, String messageText) {
+	void stateHandler(TelegramUser telegramUser, String messageText) {
 		String text = switch (telegramUser.currentState) {
 			case State.LINK_ADDING -> {
 				telegramUser.parseInfo.url = messageText
-				PriceCheckerService.Result info = checkerService.getInfo(messageText)
-				if (info.isHavingParser) {
+				def result = checkerService.getProduct(telegramUser.parseInfo.url)
+				if (result.isParserExist) {
 					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
 					telegramUser.currentState = State.NONE
 					SendMessage request = new SendMessage(telegramUser.telegramId,
-							"<b>Готово!</b>\n\n${info.parseInfoResult.name}\n\n${info.parseInfoResult.price}")
+							"<b>Готово!</b>\n\n${result.parseInfoResult.name}\n\n${result.parseInfoResult.price}")
 							.parseMode(ParseMode.HTML)
 					sendMessage(request, telegramUser.telegramId)
 					sendGreetingMessage(telegramUser.telegramId)
@@ -136,45 +125,59 @@ class TelegramService {
 
 			case State.NAME_ADDING -> {
 				telegramUser.parseInfo.name = messageText
-				telegramUser.currentState = State.PRICE_ADDING
 				logger.debug(messageText) /*Name*/
+				logger.debug(telegramUser.parseInfo.toString()) /*Name*/
+				telegramUser.parseInfo = checkerService.postProductName(telegramUser.parseInfo).parseInfoResult
 				editMessage(telegramUser.telegramId,
 						telegramUser.lastBotMessageId,
 						"""
 						|Пришли <i><u>полное название</u></i> товара со страницы
 						|<b><i>$messageText</i></b> - принято✅
 						""".stripMargin())
-				"Напиши цену этого товара сейчас"
 				sendMessage(
-						messageAskToUser(
-								"Что больше похоже на класс названия?",
+						messageAskToUser("Что больше похоже на класс названия?",
 								telegramUser,
-								["daniel", "coolerDaniel_title"],
-								CallbackMode.CLASS_NAME_ART.name()
-						),
-						telegramUser.telegramId
-				)
+								telegramUser.parseInfo.nameClassAttributes,
+								CallbackMode.CLASS_NAME_ART.name()),
+						telegramUser.telegramId)
+				telegramUser.currentState = State.PRICE_ADDING
+				"Пришли цену этого товара"
 			}
 
 			case State.PRICE_ADDING -> {
 				telegramUser.parseInfo.price = messageText
-				PriceCheckerService.Result info = checkerService.getInfo(telegramUser.parseInfo)
-				if (info.isHavingParser) {
-					editMessage(telegramUser.telegramId,
-							telegramUser.lastBotMessageId,
-							"Напиши цену этого товара сейчас\n<b><i>$messageText</i></b> - принято✅")
-					telegramUser.currentState = State.NONE
-					logger.debug(messageText) /*Price*/
-					SendMessage request = new SendMessage(telegramUser.telegramId,
-							"<b>Настройка персера завершена!</b>\n\n${info.parseInfoResult.name}\n\n${info.parseInfoResult.price}")
-							.parseMode(ParseMode.HTML)
-					sendMessage(request, telegramUser.telegramId)
-					sendGreetingMessage(telegramUser.telegramId)
-				}
+				telegramUser.parseInfo = checkerService.postProductPrice(telegramUser.parseInfo).parseInfoResult
+				editMessage(telegramUser.telegramId,
+						telegramUser.lastBotMessageId,
+						"Пришли цену этого товара\n<b><i>$messageText</i></b> - принято✅")
+				logger.debug(messageText) /*Price*/
+				sendMessage(
+						messageAskToUser(
+								"Что больше похоже на class цены?",
+								telegramUser,
+								telegramUser.parseInfo.priceClassAttributes,
+								CallbackMode.CLASS_PRICE_ART.name()
+						),
+						telegramUser.telegramId
+				)
+//					SendMessage request = new SendMessage(
+//							telegramUser.telegramId,
+//							"<b>Настройка персера завершена!</b>\n\n${info.parseInfoResult.name}\n\n${info.parseInfoResult.price}"
+//					)
+//							.parseMode(ParseMode.HTML)
+//					sendMessage(request, telegramUser.telegramId)
+				telegramUser.currentState = State.NONE
+				sendGreetingMessage(telegramUser.telegramId)
 				""
 			}
-			case State.NONE -> throw new IllegalStateException()
-			case State.SHOW_ITEMS -> throw new IllegalStateException()
+
+			case State.NONE -> {
+				throw new IllegalStateException()
+			}
+
+			case State.SHOW_ITEMS -> {
+				throw new IllegalStateException()
+			}
 		}
 		repository.save(telegramUser)
 		if (telegramUser.currentState != State.NONE) {
@@ -184,26 +187,24 @@ class TelegramService {
 		}
 	}
 
-	private void handleCallback(Update update, TelegramUser telegramUser) {
-		String callData = update.callbackQuery().data()
+	private void callbackHandler(Update update, TelegramUser telegramUser) {
+		String callbackDataStr = update.callbackQuery().data()
 		telegramUser.callbackQueryId = update.callbackQuery().id()
 		telegramUser.lastBotMessageId = update.callbackQuery().message().messageId()
 		repository.save(telegramUser)
-		if (callData.startsWith("CLASS")) {
-			switch (CallbackMode.valueOf(callData.split("=")[0])) {
-
+		if (callbackDataStr.startsWith("CLASS")) {
+			String[] callbackData = callbackDataStr.split("=")
+			switch (CallbackMode.valueOf(callbackData[0])) {
 				case CallbackMode.CLASS_PRICE_ART -> {
-					telegramUser.parseInfo.priceClassArt = callData.split("=")[-1]
+					telegramUser.parseInfo = checkerService.postPriceClassAtr(telegramUser.parseInfo, callbackData[-1]).parseInfoResult
 				}
-
 				case CallbackMode.CLASS_NAME_ART -> {
-					telegramUser.parseInfo.nameClassArt = callData.split("=")[-1]
+					telegramUser.parseInfo = checkerService.postNameClassAtr(telegramUser.parseInfo, callbackData[-1]).parseInfoResult
 				}
 			}
 			repository.save(telegramUser)
-
-		} else if (!callData.startsWith("del") && !callData.startsWith("back")) {
-			switch (State.valueOf(callData)) {
+		} else if (!callbackDataStr.startsWith("del") && !callbackDataStr.startsWith("back")) {
+			switch (State.valueOf(callbackDataStr)) {
 				case State.LINK_ADDING -> {
 					String text = "Пришли <u>ссылку</u> на товар"
 					telegramUser.currentState = State.LINK_ADDING
@@ -212,31 +213,24 @@ class TelegramService {
 				}
 
 				case State.SHOW_ITEMS -> {
-					ArrayList<String> items = ["iPhone 11 Pro", "Samsung S24 Ultra", "Казантип 2009",
-											   "Завод по производству алюминиевых ведер", "Казахи", "Нагетсы", "Шины 12\""]
+					ArrayList<String> items = checkerService.getAllFollowedProducts()
 					String text = "<i><b>Твои записи:</b></i>\n\n"
-					for (item in items) {
-						Integer itemCount = items.indexOf(item) + 1
-						text += "$itemCount. $item\n"
+					text += items.indexed().collect { index, item -> "${index + 1}. $item" }.join("\n")
+					def buttons = items.indexed().collect { index, item ->
+						new InlineKeyboardButton("❌ ${index + 1}").callbackData("del=${index + 1}")
 					}
-					def buttons = items.collect { item ->
-						new InlineKeyboardButton("❌ ${items.indexOf(item) + 1}")
-								.callbackData("del=${items.indexOf(item) + 1}")
-					}
-
 					def inlineKeyboard = keyboardBuilder(buttons, 3)
-					inlineKeyboard.addRow(new InlineKeyboardButton("Назад")
-							.callbackData("back"))
+					inlineKeyboard.addRow(new InlineKeyboardButton("Назад").callbackData("back"))
 					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text, inlineKeyboard)
 				}
 
 				default -> {
 				}
 			}
-		} else if (callData.startsWith("del")) {
-			logger.debug(callData) /*тут должно быть удаление записи*/
+		} else if (callbackDataStr.startsWith("del")) {
+			logger.debug(callbackDataStr) /*тут должно быть удаление записи*/
 
-		} else if (callData.startsWith("back")) {
+		} else if (callbackDataStr.startsWith("back")) {
 			deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
 			sendGreetingMessage(telegramUser.telegramId)
 
@@ -251,10 +245,8 @@ class TelegramService {
 				""".stripMargin()
 		SendMessage request = new SendMessage(telegramId, text)
 				.parseMode(ParseMode.HTML)
-				.replyMarkup(new InlineKeyboardMarkup([
-						new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name()),
-						new InlineKeyboardButton("Посмотреть мои записи 🗒️").callbackData(State.SHOW_ITEMS.name())
-				] as InlineKeyboardButton[]))
+				.replyMarkup(new InlineKeyboardMarkup([new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name()),
+													   new InlineKeyboardButton("Посмотреть мои записи 🗒️").callbackData(State.SHOW_ITEMS.name())] as InlineKeyboardButton[]))
 		sendMessage(request, telegramId)
 	}
 
@@ -282,10 +274,7 @@ class TelegramService {
 		}
 	}
 
-	static InlineKeyboardMarkup keyboardBuilder(
-			List<InlineKeyboardButton> buttons,
-			Integer offset
-	) {
+	static InlineKeyboardMarkup keyboardBuilder(List<InlineKeyboardButton> buttons, Integer offset) {
 		def inlineKeyboard = new InlineKeyboardMarkup()
 		def row = []
 		buttons.each { button ->
@@ -306,10 +295,7 @@ class TelegramService {
 		bot.execute(deleteMessage)
 	}
 
-	void editMessage(Long telegramId,
-					 Integer messageId,
-					 String text,
-					 InlineKeyboardMarkup keyboard = null) {
+	void editMessage(Long telegramId, Integer messageId, String text, InlineKeyboardMarkup keyboard = null) {
 		EditMessageText editedMessage = new EditMessageText(telegramId, messageId, text)
 				.parseMode(ParseMode.HTML)
 		if (keyboard) {
@@ -320,10 +306,13 @@ class TelegramService {
 
 	void sendMessage(SendMessage request, Long telegramId) {
 		SendResponse response = bot.execute(request)
-		TelegramUser telegramUser
-		telegramUser = repository.getByTelegramId(telegramId)
-		telegramUser.lastBotMessageId = response.message().messageId()
-		repository.save(telegramUser)
+		try {
+			TelegramUser telegramUser = repository.getByTelegramId(telegramId)
+			telegramUser.lastBotMessageId = response.message().messageId()
+			repository.save(telegramUser)
+		} catch (Exception e) {
+			logger.error(response?.toString() ?: e.message, e)
+		}
 	}
 
 }

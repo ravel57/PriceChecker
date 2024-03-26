@@ -1,7 +1,6 @@
 package ru.ravel.webparser.services
 
 
-import ru.ravel.core.dto.ParseInfo
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
@@ -11,8 +10,10 @@ import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.stereotype.Service
-import ru.ravel.webparser.exception.ParserDoesntExistException
+import ru.ravel.core.dto.ParseInfo
+import ru.ravel.core.util.stringToDouble
 import ru.ravel.webparser.entity.*
+import ru.ravel.core.exception.ParserDoesntExistException
 import ru.ravel.webparser.repository.Repository
 import java.io.IOException
 import java.net.URI
@@ -37,33 +38,62 @@ class WebParserService(
 		val parser = if (repository.isStoreParserExist(host)) {
 			repository.getParser(host)
 		} else {
-			throw ParserDoesntExistException("parser not exist for selected store")
+			repository.saveParser(getParserByJSoup(url))
+			throw ParserDoesntExistException("the parser is not configured for the selected store: $host")
 		}
-		val parsedProduct: ParsedProduct = getByJSoup(url, parser)
-		repository.saveParsedProduct(parsedProduct)
-		kafka.send("product-price-changed-event", parsedProduct.id!!, parsedProduct).whenCompleteAsync { result, ex ->
-			if (ex == null)
-				logger.info(result.toString())
-			else
-				logger.error(ex.message, ex)
-		}
+		val parsedProduct: ParsedProduct = getProductByJSoup(url, parser)
+		saveParsedProduct(parsedProduct)
 		return parsedProduct
 	}
+
 
 	fun getProduct(parseInfo: ParseInfo): ParsedProduct {
 		val host = URL(parseInfo.url!!).host
 		val parser = if (repository.isStoreParserExist(host)) {
 			repository.getParser(host)
 		} else {
-			val parser = getParserByJSoup(parseInfo)
-			repository.saveParser(parser)
-			val map = mapOf(
-				Pair("names", parser.allNames),
-				Pair("prices", parser.allPrices)
-			)
-			throw ParserDoesntExistException("parser not specified for attributes", map)
+			repository.saveParser(getParserByJSoup(parseInfo))
+			throw ParserDoesntExistException("the parser is not configured for the selected store: $host")
 		}
-		val parsedProduct: ParsedProduct = getByJSoup(parseInfo.url!!, parser)
+		val parsedProduct: ParsedProduct = getProductByJSoup(parseInfo.url!!, parser)
+		saveParsedProduct(parsedProduct)
+		return parsedProduct
+	}
+
+	fun getParser(parseInfo: ParseInfo) : Parser {
+		val host = URL(parseInfo.url!!).host
+		if (!repository.isStoreParserExist(host)) {
+			throw ParserDoesntExistException("the parser is not configured for the selected store: $host")
+		}
+		val parser = getParserByJSoup(parseInfo)
+		repository.saveParser(parser)
+		return parser
+	}
+
+	fun postName(parseInfo: ParseInfo): ParseInfo {
+		parseInfo.nameClassAttributes = getParser(parseInfo).allNames?.map { it.classAtr }
+		return parseInfo
+	}
+
+	fun postPrice(parseInfo: ParseInfo): ParseInfo {
+		parseInfo.priceClassAttributes = getParser(parseInfo).allPrices?.map { it.classAtr }
+		return parseInfo
+	}
+
+
+	fun setNameAtr(parseInfo: ParseInfo): ParseInfo {
+		getParser(parseInfo).allPrices?.find { it.classAtr == parseInfo.selectedPriceClassAttribute }
+		return parseInfo
+	}
+
+
+	fun setPriceAtr(parseInfo: ParseInfo): ParseInfo {
+		getParser(parseInfo).allNames?.find { it.classAtr == parseInfo.selectedNameClassAttribute }
+		return parseInfo
+	}
+
+
+	private fun saveParsedProduct(parsedProduct: ParsedProduct) {
 		repository.saveParsedProduct(parsedProduct)
 		kafka.send("product-price-changed-event", parsedProduct.id!!, parsedProduct)
 			.whenCompleteAsync { result, ex ->
@@ -73,28 +103,25 @@ class WebParserService(
 					logger.error(ex.message, ex)
 				}
 			}
-		return parsedProduct
-	}
-
-	fun setNameAtr(nameAtr: String, userID: Long): Any? {
-		return null
-	}
-
-	fun setPriceAtr(priceAtr: String, userID: Long): Any? {
-		return null
 	}
 
 
-	private fun getByJSoup(url: String, parser: Parser): ParsedProduct {
+	private fun getProductByJSoup(url: String, parser: Parser): ParsedProduct {
 		return try {
-			val document = Jsoup.connect(url).followRedirects(true).timeout(60000).get()
+			val document = Jsoup.connect(url).followRedirects(true).timeout(60_000).get()
 			val allElements = document.body().allElements
-			val price = allElements
-				.map { it.getElementsByAttributeValue("class", parser.selectedPrice!!.classAtr) }
-				.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
-			val name = allElements
-				.map { it.getElementsByAttributeValue("class", parser.selectedName!!.classAtr) }
-				.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
+			val price = if (parser.selectedPrice != null) {
+				allElements.map { it.getElementsByAttributeValue("class", parser.selectedPrice!!.classAtr) }
+					.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
+			} else {
+				throw ParserDoesntExistException("the parser is not configured for the selected store: $url")
+			}
+			val name = if (parser.selectedName != null) {
+				allElements.map { it.getElementsByAttributeValue("class", parser.selectedName!!.classAtr) }
+					.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
+			} else {
+				throw ParserDoesntExistException("the parser is not configured for the selected store: $url")
+			}
 			ParsedProduct(
 				name = name,
 				price = price,
@@ -108,46 +135,55 @@ class WebParserService(
 
 	@Throws(ParserDoesntExistException::class)
 	private fun getParserByJSoup(parseInfo: ParseInfo): Parser {
-		return try {
-			val document = Jsoup.connect(parseInfo.url!!).followRedirects(true).timeout(60000).get()
+		try {
+			val document = Jsoup.connect(parseInfo.url!!).followRedirects(true).timeout(60_000).get()
 			val allElements = document.body().allElements
-			val nameFilter = { it: TextNode -> it.text().contains(parseInfo.name!!) }
-			val parsedProductNames= getNodes(allElements, nameFilter).map {
-				val nameElement = it as Element
-				val parsedProductName = ParsedProductName(
-					value = nameElement.ownText(),
-					idAtr = nameElement.id(),
-					classAtr = nameElement.className()
-				)
-				repository.saveParsedProductName(parsedProductName)
-				parsedProductName
+			val parsedProductNames = if (parseInfo.name != null) {
+				val nameFilter = { it: TextNode -> it.text().contains(parseInfo.name!!) }
+				getNodes(allElements, nameFilter).map {
+					it as Element
+					ParsedProductName(value = it.ownText(), idAtr = it.id(), classAtr = it.className())
+				}
+			} else {
+				null
 			}
-			val priceFilter = { it: TextNode ->
-				val replace = it.text().replace(',', '.').replace("[^0-9.]".toRegex(), "")
-				val replace1 = parseInfo.price!!.replace(',', '.').replace("[^0-9.]".toRegex(), "")
-				replace == replace1
-			}
-			val parsedProductPrices = getNodes(allElements, priceFilter).map {
-				val priceElement = it as Element
-				val parsedProductPrice = ParsedProductPrice(
-					strValue = priceElement.ownText(),
-					idAtr = priceElement.id(),
-					classAtr = priceElement.className()
-				)
-				repository.saveParsedProductPrice(parsedProductPrice)
-				parsedProductPrice
+			val parsedProductPrices = if (parseInfo.price != null) {
+				val priceFilter = { it: TextNode -> stringToDouble(it.text()) == stringToDouble(parseInfo.price!!) }
+				getNodes(allElements, priceFilter).map {
+					it as Element
+					ParsedProductPrice(strValue = it.ownText(), idAtr = it.id(), classAtr = it.className())
+				}
+			} else {
+				null
 			}
 			val host = URI(document.location()).host
-			Parser(
-				allNames = parsedProductNames.distinct(),
-//				selectedName = parsedProductNames.distinct()[1],
-				allPrices = parsedProductPrices.distinct(),
-//				selectedPrice = parsedProductPrices.distinct()[1],
+			return Parser(
+				allNames = parsedProductNames?.distinct(),
+				allPrices = parsedProductPrices?.distinct(),
 				storeUrl = host,
 			)
 		} catch (e: IOException) {
 			logger.error("parsing exception: ${e.message}")
-			throw NullPointerException()
+			throw RuntimeException(e.message)
+		} catch (e: Exception) {
+			logger.error("another exception: ${e.message}")
+			throw RuntimeException(e.message)
+		}
+	}
+
+
+	@Throws(ParserDoesntExistException::class)
+	private fun getParserByJSoup(url: String): Parser {
+		try {
+			val document = Jsoup.connect(url).followRedirects(true).timeout(60_000).get()
+			val host = URI(document.location()).host
+			return Parser(storeUrl = host)
+		} catch (e: IOException) {
+			logger.error("parsing exception: ${e.message}")
+			throw RuntimeException(e.message)
+		} catch (e: Exception) {
+			logger.error("another exception: ${e.message}")
+			throw RuntimeException(e.message)
 		}
 	}
 
@@ -167,6 +203,5 @@ class WebParserService(
 	private fun getBySelenium(url: String, documentElement: String): ParsedProductPrice? {
 		return null
 	}
-
 
 }

@@ -5,7 +5,7 @@ import org.hibernate.annotations.OnDelete
 import org.hibernate.annotations.OnDeleteAction
 
 @Entity
-@Table(name = "parser_users")
+@Table(name = "parser_user")
 data class User(
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
