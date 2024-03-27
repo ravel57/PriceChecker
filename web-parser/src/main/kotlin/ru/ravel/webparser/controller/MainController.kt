@@ -53,7 +53,7 @@ class MainController(
 
 
 	@PostMapping("/set-name-atr")
-	fun postNameAtr(parseInfo: ParseInfo): ResponseEntity<Any> {
+	fun postNameAtr(@RequestBody parseInfo: ParseInfo): ResponseEntity<Any> {
 		try {
 			return ResponseEntity.ok().body(parserService.setNameAtr(parseInfo))
 		} catch (e: Exception) {
@@ -64,7 +64,7 @@ class MainController(
 
 
 	@PostMapping("/set-price-atr")
-	fun postPriceAtr(parseInfo: ParseInfo): ResponseEntity<Any> {
+	fun postPriceAtr(@RequestBody parseInfo: ParseInfo): ResponseEntity<Any> {
 		try {
 			return ResponseEntity.ok().body(parserService.setPriceAtr(parseInfo))
 		} catch (e: Exception) {

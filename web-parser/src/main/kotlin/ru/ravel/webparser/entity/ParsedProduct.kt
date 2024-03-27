@@ -11,7 +11,6 @@ data class ParsedProduct(
 
 	@Id
 	@GeneratedValue(strategy = GenerationType.IDENTITY)
-	@JsonIgnore
 	var id: Long? = null,
 
 	var name: String = "",

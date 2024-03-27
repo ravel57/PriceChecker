@@ -52,7 +52,7 @@ class PriceCheckerService {
 
 
 	Result postNameClassAtr(ParseInfo info, String classAtr) {
-		info.selectedPriceClassAttribute = classAtr
+		info.selectedNameClassAttribute = classAtr
 		String json = gson.toJson(info)
 		HttpResponse<String> response = sendRequest("http://localhost:8765/web-parser/set-name-atr", json)
 		logger.debug(response.toString())
@@ -61,7 +61,7 @@ class PriceCheckerService {
 
 
 	Result postPriceClassAtr(ParseInfo info, String classAtr) {
-		info.selectedNameClassAttribute = classAtr
+		info.selectedPriceClassAttribute = classAtr
 		String json = gson.toJson(info)
 		HttpResponse<String> response = sendRequest("http://localhost:8765/web-parser/set-price-atr", json)
 		logger.debug(response.toString())

@@ -11,9 +11,9 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.kafka.core.KafkaTemplate
 import org.springframework.stereotype.Service
 import ru.ravel.core.dto.ParseInfo
+import ru.ravel.core.exception.ParserDoesntExistException
 import ru.ravel.core.util.stringToDouble
 import ru.ravel.webparser.entity.*
-import ru.ravel.core.exception.ParserDoesntExistException
 import ru.ravel.webparser.repository.Repository
 import java.io.IOException
 import java.net.URI
@@ -60,12 +60,18 @@ class WebParserService(
 		return parsedProduct
 	}
 
-	fun getParser(parseInfo: ParseInfo) : Parser {
+	fun getParser(parseInfo: ParseInfo): Parser {
 		val host = URL(parseInfo.url!!).host
 		if (!repository.isStoreParserExist(host)) {
 			throw ParserDoesntExistException("the parser is not configured for the selected store: $host")
 		}
-		val parser = getParserByJSoup(parseInfo)
+		val parser = repository.getParser(host)
+		val tmpParser = getParserByJSoup(parseInfo)
+		parser.apply {
+			this.allNames = tmpParser.allNames
+			this.allPrices = tmpParser.allPrices
+			this.storeUrl = tmpParser.storeUrl
+		}
 		repository.saveParser(parser)
 		return parser
 	}
@@ -82,13 +88,19 @@ class WebParserService(
 
 
 	fun setNameAtr(parseInfo: ParseInfo): ParseInfo {
-		getParser(parseInfo).allPrices?.find { it.classAtr == parseInfo.selectedPriceClassAttribute }
+		val parser = getParser(parseInfo)
+		val productName = parser.allNames?.find { it.classAtr == parseInfo.selectedNameClassAttribute }
+		parser.selectedName = productName
+		repository.saveParser(parser)
 		return parseInfo
 	}
 
 
 	fun setPriceAtr(parseInfo: ParseInfo): ParseInfo {
-		getParser(parseInfo).allNames?.find { it.classAtr == parseInfo.selectedNameClassAttribute }
+		val parser = getParser(parseInfo)
+		val productPrice = parser.allPrices?.find { it.classAtr == parseInfo.selectedPriceClassAttribute }
+		parser.selectedPrice = productPrice
+		repository.saveParser(parser)
 		return parseInfo
 	}
 
