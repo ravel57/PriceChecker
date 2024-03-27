@@ -47,18 +47,18 @@ class WebParserService(
 	}
 
 
-	fun getProduct(parseInfo: ParseInfo): ParsedProduct {
-		val host = URL(parseInfo.url!!).host
-		val parser = if (repository.isStoreParserExist(host)) {
-			repository.getParser(host)
-		} else {
-			repository.saveParser(getParserByJSoup(parseInfo))
-			throw ParserDoesntExistException("the parser is not configured for the selected store: $host")
-		}
-		val parsedProduct: ParsedProduct = getProductByJSoup(parseInfo.url!!, parser)
-		saveParsedProduct(parsedProduct)
-		return parsedProduct
-	}
+//	fun getProduct(parseInfo: ParseInfo): ParsedProduct {
+//		val host = URL(parseInfo.url!!).host
+//		val parser = if (repository.isStoreParserExist(host)) {
+//			repository.getParser(host)
+//		} else {
+//			repository.saveParser(getParserByJSoup(parseInfo))
+//			throw ParserDoesntExistException("the parser is not configured for the selected store: $host")
+//		}
+//		val parsedProduct: ParsedProduct = getProductByJSoup(parseInfo.url!!, parser)
+//		saveParsedProduct(parsedProduct)
+//		return parsedProduct
+//	}
 
 	fun getParser(parseInfo: ParseInfo): Parser {
 		val host = URL(parseInfo.url!!).host
@@ -76,10 +76,12 @@ class WebParserService(
 		return parser
 	}
 
+
 	fun postName(parseInfo: ParseInfo): ParseInfo {
 		parseInfo.nameClassAttributes = getParser(parseInfo).allNames?.map { it.classAtr }
 		return parseInfo
 	}
+
 
 	fun postPrice(parseInfo: ParseInfo): ParseInfo {
 		parseInfo.priceClassAttributes = getParser(parseInfo).allPrices?.map { it.classAtr }
@@ -122,17 +124,19 @@ class WebParserService(
 		return try {
 			val document = Jsoup.connect(url).followRedirects(true).timeout(60_000).get()
 			val allElements = document.body().allElements
+			val message = "the parser is not configured for the selected store: $url"
 			val price = if (parser.selectedPrice != null) {
-				allElements.map { it.getElementsByAttributeValue("class", parser.selectedPrice!!.classAtr) }
-					.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
+				val str = allElements.map { it.getElementsByAttributeValue("class", parser.selectedPrice!!.classAtr) }
+					.find { it.size > 0 }?.first()?.childNodes().toString()
+				stringToDouble(str)
 			} else {
-				throw ParserDoesntExistException("the parser is not configured for the selected store: $url")
+				throw ParserDoesntExistException(message)
 			}
 			val name = if (parser.selectedName != null) {
 				allElements.map { it.getElementsByAttributeValue("class", parser.selectedName!!.classAtr) }
 					.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
 			} else {
-				throw ParserDoesntExistException("the parser is not configured for the selected store: $url")
+				throw ParserDoesntExistException(message)
 			}
 			ParsedProduct(
 				name = name,
@@ -151,7 +155,7 @@ class WebParserService(
 			val document = Jsoup.connect(parseInfo.url!!).followRedirects(true).timeout(60_000).get()
 			val allElements = document.body().allElements
 			val parsedProductNames = if (parseInfo.name != null) {
-				val nameFilter = { it: TextNode -> it.text().contains(parseInfo.name!!) }
+				val nameFilter = { it: TextNode -> it.text().lowercase().contains(parseInfo.name!!.lowercase()) }
 				getNodes(allElements, nameFilter).map {
 					it as Element
 					ParsedProductName(value = it.ownText(), idAtr = it.id(), classAtr = it.className())

@@ -11,13 +11,13 @@ spring:
         hbm2ddl:
           create_namespaces: true
 
-logging:
-  level:
-    org:
-      hibernate:
-        SQL: trace
-        type: trace
-        type.descriptor.sql.BasicBinder: trace
+#logging:
+#  level:
+#    org:
+#      hibernate:
+#        SQL: trace
+#        type: trace
+#        type.descriptor.sql.BasicBinder: trace
 
 eureka.client.service-url.defaultZone: http://localhost:8761/eureka
 

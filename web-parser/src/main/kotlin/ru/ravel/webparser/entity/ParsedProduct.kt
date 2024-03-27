@@ -15,7 +15,7 @@ data class ParsedProduct(
 
 	var name: String = "",
 
-	var price: String = "",
+	var price: Double = 0.0,
 
 	@OneToOne(cascade = [CascadeType.ALL], orphanRemoval = true, fetch = FetchType.EAGER)
 	@OnDelete(action = OnDeleteAction.CASCADE)

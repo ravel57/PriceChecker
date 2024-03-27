@@ -4,7 +4,11 @@ class ParseUtil
 
 fun stringToDouble(str: String): Double {
 	return try {
-		str.replace(',', '.').replace("[^0-9.]".toRegex(), "").toDouble()
+		return str.replace(',', '.')
+			.replace("[^0-9.]".toRegex(), "")
+//			.replace("^.".toRegex(), "")
+//			.replace(".$".toRegex(), "")
+			.toDouble()
 	} catch (e: Exception) {
 		0.0
 	}
