@@ -26,6 +26,7 @@ eureka:
     register:
       with-eureka: true
   instance:
+    hostname: localhost
     prefer-ip-address: true
 
 server.port: 8765
