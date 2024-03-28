@@ -93,11 +93,13 @@ class TelegramService {
 			new InlineKeyboardButton(index + 1 as String).callbackData("$mode=$item")
 		}
 		new MessageBuilder(bot)
+				.method(MessageBuilder.Method.SEND)
 				.id(telegramUser.telegramId)
 				.text(vars)
 				.buttons(buttons)
 				.keyboardOffset(2)
 				.parseMode(ParseMode.HTML)
+				.send()
 	}
 
 
@@ -127,9 +129,9 @@ class TelegramService {
 					sendGreetingMessage(telegramUser)
 					""
 				} else {
-					telegramUser.lastBotMessageId = new MessageBuilder(bot)
+					new MessageBuilder(bot)
 							.id(telegramUser.telegramId)
-							.method(MessageBuilder.Method.SEND)
+							.method(MessageBuilder.Method.EDIT)
 							.messageId(telegramUser.lastBotMessageId)
 							.text("Пришли <u>ссылку</u> на товар\n<b><i>$messageText</i></b> - принято✅")
 							.parseMode(ParseMode.HTML)
@@ -158,7 +160,6 @@ class TelegramService {
 
 			default -> ""
 		}
-		repository.save(telegramUser)
 		if (telegramUser.currentState != State.NONE && text != null && text != "") {
 			telegramUser.lastBotMessageId = new MessageBuilder(bot)
 					.id(telegramUser.telegramId)
@@ -168,6 +169,7 @@ class TelegramService {
 					.messageId(telegramUser.searchMessageId)
 					.send()
 		}
+		repository.save(telegramUser)
 	}
 
 	boolean nameClassAdding(TelegramUser telegramUser) {
@@ -212,7 +214,7 @@ class TelegramService {
 					"Что больше похоже на class цены?",
 					telegramUser,
 					telegramUser.parseInfo.priceClassAttributes,
-					State.CLASS_PRICE_ART.name()
+					State.CLASS_PRICE_ART
 			)
 			return false
 		} else if (telegramUser.parseInfo.priceClassAttributes.size() == 0) {
@@ -225,7 +227,7 @@ class TelegramService {
 					.send()
 			String text = """
 					|Такого элемента <b>не нашлось</b>😥
-					|Проверьте <b><u>корректность отправленой цены</u></b>  и попробуйте снова
+					|Проверьте <b><u>корректность отправленой цены</u></b> и попробуйте снова
 					""".stripMargin()
 			telegramUser.lastBotMessageId = new MessageBuilder(bot)
 					.id(telegramUser.telegramId)
@@ -264,14 +266,21 @@ class TelegramService {
 							""".stripMargin()
 					new MessageBuilder(bot)
 							.id(telegramUser.telegramId)
-							.text("<b><i>$telegramUser.parseInfo.price</i></b> - принято✅")
+							.text(text)
+							.parseMode(ParseMode.HTML)
 							.messageId(telegramUser.searchMessageId)
 							.method(MessageBuilder.Method.EDIT)
 							.text(text)
 							.send()
-					request = new SendMessage(telegramUser.telegramId, "Пришли <b>цену</b> этого товара")
+					new MessageBuilder(bot)
+							.id(telegramUser.telegramId)
+							.text("Пришли <b>цену</b> этого товара")
+							.method(MessageBuilder.Method.SEND)
 							.parseMode(ParseMode.HTML)
-					sendMessage(request, telegramUser.telegramId)
+							.send()
+//					request = new SendMessage(telegramUser.telegramId, "Пришли <b>цену</b> этого товара")
+//							.parseMode(ParseMode.HTML)
+//					sendMessage(request, telegramUser.telegramId)
 				}
 				case State.CLASS_PRICE_ART -> {
 					new MessageBuilder(bot)
@@ -293,10 +302,10 @@ class TelegramService {
 					telegramUser.lastBotMessageId = new MessageBuilder(bot)
 							.id(telegramUser.telegramId)
 							.text("""
-									|<b>Настройка персера завершена!</b>
-									|${telegramUser.parseInfo.name}
-									|${telegramUser.parseInfo.price}
-									""".stripMargin())
+								  |<b>Настройка персера завершена!</b>
+								  |${telegramUser.parseInfo.name}
+								  |${telegramUser.parseInfo.price}
+								  """.stripMargin())
 							.method(MessageBuilder.Method.SEND)
 							.parseMode(ParseMode.HTML)
 							.send()
@@ -384,7 +393,7 @@ class TelegramService {
 		} else {
 			telegramUser.searchMessageId = telegramUser.lastBotMessageId
 		}
-		telegramUser.searchMessageId = new MessageBuilder(bot)
+		new MessageBuilder(bot)
 				.id(telegramUser.telegramId)
 				.messageId(telegramUser.searchMessageId)
 				.method(MessageBuilder.Method.EDIT)

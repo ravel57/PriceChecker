@@ -110,10 +110,15 @@ class MessageBuilder {
 			}
 		}
 
-		SendResponse response = bot.execute(message) as SendResponse
-		if (response.ok)
-			return response.message().messageId()
-		else
-			throw new RuntimeException(response.description())
+		if (method == Method.SEND){
+			SendResponse response = bot.execute(message) as SendResponse
+			if (response.ok)
+				return response.message().messageId()
+			else
+				throw new RuntimeException(response.description())
+		}else {
+			bot.execute(message)
+		}
+		return null
 	}
 }
