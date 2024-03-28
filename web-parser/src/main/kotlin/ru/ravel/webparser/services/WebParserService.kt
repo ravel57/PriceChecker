@@ -1,6 +1,7 @@
 package ru.ravel.webparser.services
 
 
+import com.google.common.base.Suppliers
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
@@ -19,6 +20,7 @@ import java.io.IOException
 import java.net.URI
 import java.net.URL
 import java.util.*
+import java.util.concurrent.TimeUnit
 import java.util.function.Predicate
 
 @Service
@@ -32,6 +34,8 @@ class WebParserService(
 
 	private val logger = LoggerFactory.getLogger(this.javaClass)
 
+	private val suppliers: MutableMap<String, Any> = mutableMapOf()
+
 
 	fun getProduct(url: String): ParsedProduct {
 		val host = URL(url).host
@@ -41,7 +45,11 @@ class WebParserService(
 			repository.saveParser(getParserByJSoup(url))
 			throw ParserDoesntExistException("the parser is not configured for the selected store: $host")
 		}
-		val parsedProduct: ParsedProduct = getProductByJSoup(url, parser)
+		val supplier = Suppliers.memoizeWithExpiration({
+			getProductByJSoup(url, parser)
+		}, 30, TimeUnit.MINUTES)
+		suppliers.computeIfAbsent(url, { supplier })
+		val parsedProduct: ParsedProduct = supplier.get()
 		saveParsedProduct(parsedProduct)
 		return parsedProduct
 	}
@@ -121,7 +129,7 @@ class WebParserService(
 
 
 	private fun getProductByJSoup(url: String, parser: Parser): ParsedProduct {
-		return try {
+		try {
 			val document = Jsoup.connect(url).followRedirects(true).timeout(60_000).get()
 			val allElements = document.body().allElements
 			val message = "the parser is not configured for the selected store: $url"
@@ -138,10 +146,7 @@ class WebParserService(
 			} else {
 				throw ParserDoesntExistException(message)
 			}
-			ParsedProduct(
-				name = name,
-				price = price,
-			)
+			return ParsedProduct(name = name, price = price)
 		} catch (e: IOException) {
 			logger.error("parsing exception: ${e.message}")
 			throw NullPointerException()

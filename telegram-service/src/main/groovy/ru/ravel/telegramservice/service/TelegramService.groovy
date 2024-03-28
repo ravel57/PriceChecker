@@ -1,19 +1,19 @@
 package ru.ravel.telegramservice.service
 
-import com.pengrad.telegrambot.*
+import com.pengrad.telegrambot.ExceptionHandler
+import com.pengrad.telegrambot.TelegramBot
+import com.pengrad.telegrambot.TelegramException
+import com.pengrad.telegrambot.UpdatesListener
 import com.pengrad.telegrambot.model.Update
 import com.pengrad.telegrambot.model.request.InlineKeyboardButton
-import com.pengrad.telegrambot.model.request.InlineKeyboardMarkup
 import com.pengrad.telegrambot.model.request.ParseMode
-import com.pengrad.telegrambot.request.DeleteMessage
-import com.pengrad.telegrambot.request.EditMessageText
 import com.pengrad.telegrambot.request.SendMessage
-import com.pengrad.telegrambot.response.SendResponse
 import org.slf4j.Logger
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 import ru.ravel.core.dto.ParseInfo
+import ru.ravel.telegramservice.builder.MessageBuilder
 import ru.ravel.telegramservice.dto.Command
 import ru.ravel.telegramservice.dto.State
 import ru.ravel.telegramservice.entity.TelegramUser
@@ -61,7 +61,7 @@ class TelegramService {
 						if (update?.message()?.text() && messageText.startsWith('/')) {
 							switch (Command.getByText(messageText)) {
 								case Command.START -> {
-									sendGreetingMessage(telegramId)
+									sendGreetingMessage(telegramUser)
 								}
 							}
 						} else {
@@ -84,7 +84,7 @@ class TelegramService {
 	}
 
 
-	static SendMessage messageAskToUser(String enterText, TelegramUser telegramUser, List<String> variables, String mode) {
+	void messageAskToUser(String enterText, TelegramUser telegramUser, List<String> variables, State mode) {
 		String vars = "$enterText\n\n"
 		vars += variables.indexed()
 				.collect { index, variable -> "<b>[${index + 1}]</b>\n$variable" }
@@ -92,9 +92,12 @@ class TelegramService {
 		def buttons = variables.indexed().collect { index, item ->
 			new InlineKeyboardButton(index + 1 as String).callbackData("$mode=$item")
 		}
-		return new SendMessage(telegramUser.telegramId, vars)
+		new MessageBuilder(bot)
+				.id(telegramUser.telegramId)
+				.text(vars)
+				.buttons(buttons)
+				.keyboardOffset(2)
 				.parseMode(ParseMode.HTML)
-				.replyMarkup(keyboardBuilder(buttons, 2))
 	}
 
 
@@ -105,24 +108,34 @@ class TelegramService {
 				telegramUser.parseInfo.url = messageText
 				def result = checkerService.getProduct(telegramUser.parseInfo.url)
 				if (result.isParserExist) {
-					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
+					new MessageBuilder(bot)
+							.id(telegramUser.telegramId)
+							.messageId(telegramUser.lastBotMessageId)
+							.method(MessageBuilder.Method.DELETE)
+							.send()
 					telegramUser.currentState = State.NONE
-					SendMessage request = new SendMessage(telegramUser.telegramId,
-							"""
+
+					def text = """
 							|<b>Готово!</b>
 							|<b><u>${result.parseInfoResult.name}</u></b>
 							|<b><u>${result.parseInfoResult.price}</u></b>
-							""".stripMargin())
-							.parseMode(ParseMode.HTML)
-					sendMessage(request, telegramUser.telegramId)
-					sendGreetingMessage(telegramUser.telegramId)
+							""".stripMargin()
+					new MessageBuilder(bot)
+							.id(telegramUser.telegramId)
+							.text(text)
+							.send()
+					sendGreetingMessage(telegramUser)
 					""
 				} else {
-					telegramUser.currentState = State.NAME_ADDING
+					telegramUser.lastBotMessageId = new MessageBuilder(bot)
+							.id(telegramUser.telegramId)
+							.method(MessageBuilder.Method.SEND)
+							.messageId(telegramUser.lastBotMessageId)
+							.text("Пришли <u>ссылку</u> на товар\n<b><i>$messageText</i></b> - принято✅")
+							.parseMode(ParseMode.HTML)
+							.send()
 					logger.debug(messageText) /*URL*/
-					editMessage(telegramUser.telegramId,
-							telegramUser.lastBotMessageId,
-							"Пришли <u>ссылку</u> на товар\n<b><i>$messageText</i></b> - принято✅")
+					telegramUser.currentState = State.NAME_ADDING
 					"<b>Парсер нужо настроить</b>\nПришли <i><u>полное название</u></i> товара со страницы"
 				}
 			}
@@ -142,38 +155,49 @@ class TelegramService {
 					""
 				}
 			}
+
+			default -> ""
 		}
 		repository.save(telegramUser)
 		if (telegramUser.currentState != State.NONE && text != null && text != "") {
-			SendMessage request = new SendMessage(telegramUser.telegramId, text)
+			telegramUser.lastBotMessageId = new MessageBuilder(bot)
+					.id(telegramUser.telegramId)
+					.method(MessageBuilder.Method.SEND)
+					.text(text)
 					.parseMode(ParseMode.HTML)
-			sendMessage(request, telegramUser.telegramId)
+					.messageId(telegramUser.searchMessageId)
+					.send()
 		}
 	}
 
 	boolean nameClassAdding(TelegramUser telegramUser) {
 		telegramUser.parseInfo = checkerService.postProductName(telegramUser.parseInfo).parseInfoResult
 		if (telegramUser.parseInfo.nameClassAttributes.size() > 1) {
-			sendMessage(
-					messageAskToUser("Что больше похоже на класс названия?",
-							telegramUser,
-							telegramUser.parseInfo.nameClassAttributes,
-							State.CLASS_NAME_ART.name()),
-					telegramUser.telegramId)
+			messageAskToUser("Что больше похоже на class названия?",
+					telegramUser,
+					telegramUser.parseInfo.nameClassAttributes,
+					State.CLASS_NAME_ART)
 			return false
 		} else if (telegramUser.parseInfo.nameClassAttributes.size() == 0) {
 			telegramUser.currentState = State.NAME_ADDING
-			editMessage(
-					telegramUser.telegramId,
-					telegramUser.searchMessageId,
-					"Не найден❌")
-			SendMessage request = new SendMessage(
-					telegramUser.telegramId,
-					"""
+			new MessageBuilder(bot)
+					.id(telegramUser.telegramId)
+					.method(MessageBuilder.Method.EDIT)
+					.messageId(telegramUser.searchMessageId)
+					.text("Не найден❌")
+					.messageId(telegramUser.searchMessageId)
+					.send()
+			def text = """
 					|Такого элемента <b>не нашлось</b>😥
 					|Проверьте <b><u>корректность отправленого названия</u></b> и попробуйте снова
-					""".stripMargin()).parseMode(ParseMode.HTML)
-			sendMessage(request, telegramUser.telegramId)
+					""".stripMargin()
+			telegramUser.lastBotMessageId = new MessageBuilder(bot)
+					.id(telegramUser.telegramId)
+					.method(MessageBuilder.Method.SEND)
+					.text(text)
+					.parseMode(ParseMode.HTML)
+					.messageId(telegramUser.searchMessageId)
+					.send()
 			return false
 		} else {
 			return true
@@ -184,29 +208,32 @@ class TelegramService {
 		telegramUser.parseInfo = checkerService.postProductPrice(telegramUser.parseInfo).parseInfoResult
 		repository.save(telegramUser)
 		if (telegramUser.parseInfo.priceClassAttributes.size() > 1) {
-			sendMessage(
-					messageAskToUser(
-							"Что больше похоже на class цены?",
-							telegramUser,
-							telegramUser.parseInfo.priceClassAttributes,
-							State.CLASS_PRICE_ART.name()
-					),
-					telegramUser.telegramId
+			messageAskToUser(
+					"Что больше похоже на class цены?",
+					telegramUser,
+					telegramUser.parseInfo.priceClassAttributes,
+					State.CLASS_PRICE_ART.name()
 			)
 			return false
 		} else if (telegramUser.parseInfo.priceClassAttributes.size() == 0) {
 			telegramUser.currentState = State.PRICE_ADDING
-			editMessage(
-					telegramUser.telegramId,
-					telegramUser.searchMessageId,
-					"Не найден❌")
-			SendMessage request = new SendMessage(
-					telegramUser.telegramId,
-					"""
+			new MessageBuilder(bot)
+					.id(telegramUser.telegramId)
+					.method(MessageBuilder.Method.EDIT)
+					.text("Не найден❌")
+					.messageId(telegramUser.searchMessageId)
+					.send()
+			String text = """
 					|Такого элемента <b>не нашлось</b>😥
 					|Проверьте <b><u>корректность отправленой цены</u></b>  и попробуйте снова
-					""".stripMargin()).parseMode(ParseMode.HTML)
-			sendMessage(request, telegramUser.telegramId)
+					""".stripMargin()
+			telegramUser.lastBotMessageId = new MessageBuilder(bot)
+					.id(telegramUser.telegramId)
+					.method(MessageBuilder.Method.SEND)
+					.text(text)
+					.parseMode(ParseMode.HTML)
+					.send()
+			telegramUser.currentState = State.LINK_ADDING
 			return false
 		} else {
 			return true
@@ -222,64 +249,92 @@ class TelegramService {
 			String[] callbackData = callbackDataStr.split("=")
 			switch (State.valueOf(callbackData[0])) {
 				case State.CLASS_NAME_ART -> {
-					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
+					new MessageBuilder(bot)
+							.id(telegramUser.telegramId)
+							.messageId(telegramUser.lastBotMessageId)
+							.method(MessageBuilder.Method.DELETE)
+							.send()
 					telegramUser.parseInfo = checkerService.postNameClassAtr(telegramUser.parseInfo, callbackData[-1])
 							.parseInfoResult
 					telegramUser.currentState = State.PRICE_ADDING
 
-					editMessage(telegramUser.telegramId,
-							telegramUser.searchMessageId,
-							"""
+					def text = """
 							|Пришли <i><u>полное название</u></i> товара со страницы
 							|<b><i>$telegramUser.parseInfo.name</i></b> - принято✅
 							""".stripMargin()
-					)
+					new MessageBuilder(bot)
+							.id(telegramUser.telegramId)
+							.text("<b><i>$telegramUser.parseInfo.price</i></b> - принято✅")
+							.messageId(telegramUser.searchMessageId)
+							.method(MessageBuilder.Method.EDIT)
+							.text(text)
+							.send()
 					request = new SendMessage(telegramUser.telegramId, "Пришли <b>цену</b> этого товара")
 							.parseMode(ParseMode.HTML)
 					sendMessage(request, telegramUser.telegramId)
 				}
 				case State.CLASS_PRICE_ART -> {
-					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
+					new MessageBuilder(bot)
+							.id(telegramUser.telegramId)
+							.messageId(telegramUser.lastBotMessageId)
+							.method(MessageBuilder.Method.DELETE)
+							.send()
 					telegramUser.parseInfo = checkerService.postPriceClassAtr(telegramUser.parseInfo, callbackData[-1])
 							.parseInfoResult
 					telegramUser.currentState = State.NONE
 
-					editMessage(telegramUser.telegramId, telegramUser.searchMessageId,
-							"<b><i>$telegramUser.parseInfo.price</i></b> - принято✅"
-					)
-
-					request = new SendMessage(
-							telegramUser.telegramId,
-							"""
-							|<b>Настройка персера завершена!</b>
-							|${telegramUser.parseInfo.name}
-							|${telegramUser.parseInfo.price}
-							""".stripMargin()
-					).parseMode(ParseMode.HTML)
-					sendMessage(request, telegramUser.telegramId)
-					sendGreetingMessage(telegramUser.telegramId)
+					new MessageBuilder(bot)
+							.method(MessageBuilder.Method.EDIT)
+							.id(telegramUser.telegramId)
+							.text("<b><i>$telegramUser.parseInfo.price</i></b> - принято✅")
+							.parseMode(ParseMode.HTML)
+							.messageId(telegramUser.searchMessageId)
+							.send()
+					telegramUser.lastBotMessageId = new MessageBuilder(bot)
+							.id(telegramUser.telegramId)
+							.text("""
+									|<b>Настройка персера завершена!</b>
+									|${telegramUser.parseInfo.name}
+									|${telegramUser.parseInfo.price}
+									""".stripMargin())
+							.method(MessageBuilder.Method.SEND)
+							.parseMode(ParseMode.HTML)
+							.send()
+					telegramUser.currentState = State.LINK_ADDING
+					sendGreetingMessage(telegramUser)
 				}
 			}
 			repository.save(telegramUser)
 		} else if (!callbackDataStr.startsWith("del") && !callbackDataStr.startsWith("back")) {
 			switch (State.valueOf(callbackDataStr)) {
 				case State.LINK_ADDING -> {
-					String text = "Пришли <u>ссылку</u> на товар"
+					new MessageBuilder(bot)
+							.id(telegramUser.telegramId)
+							.messageId(telegramUser.lastBotMessageId)
+							.method(MessageBuilder.Method.EDIT)
+							.text("Пришли <u>ссылку</u> на товар")
+							.parseMode(ParseMode.HTML)
+							.send()
 					telegramUser.currentState = State.LINK_ADDING
 					repository.save(telegramUser)
-					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text)
 				}
 
 				case State.SHOW_ITEMS -> {
 					ArrayList<String> items = checkerService.getAllFollowedProducts()
-					String text = "<i><b>Твои записи:</b></i>\n\n"
-					text += items.indexed().collect { index, item -> "${index + 1}. $item" }.join("\n")
-					def buttons = items.indexed().collect { index, item ->
-						new InlineKeyboardButton("❌ ${index + 1}").callbackData("del=${index + 1}")
-					}
-					def inlineKeyboard = keyboardBuilder(buttons, 3)
-					inlineKeyboard.addRow(new InlineKeyboardButton("Назад").callbackData("back"))
-					editMessage(telegramUser.telegramId, telegramUser.lastBotMessageId, text, inlineKeyboard)
+					StringBuilder text = new StringBuilder("<i><b>Твои записи:</b></i>\n\n")
+							.append(items.indexed().collect { index, item -> "${index + 1}. $item" }.join("\n"))
+					new MessageBuilder(bot)
+							.id(telegramUser.telegramId)
+							.messageId(telegramUser.lastBotMessageId)
+							.method(MessageBuilder.Method.EDIT)
+							.text(text.toString())
+							.parseMode(ParseMode.HTML)
+							.buttons(items.indexed().collect { index, item ->
+								new InlineKeyboardButton("❌ ${index + 1}").callbackData("del=${index + 1}")
+							})
+							.addBackButton("назад")
+							.keyboardOffset(3)
+							.send()
 				}
 
 				default -> {
@@ -290,9 +345,12 @@ class TelegramService {
 			logger.debug(callbackData[-1]) /*тут должно быть удаление записи*/
 
 		} else if (callbackDataStr.startsWith("back")) {
-			deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
-			sendGreetingMessage(telegramUser.telegramId)
-
+			new MessageBuilder(bot)
+					.id(telegramUser.telegramId)
+					.messageId(telegramUser.lastBotMessageId)
+					.method(MessageBuilder.Method.DELETE)
+					.send()
+			sendGreetingMessage(telegramUser)
 		}
 	}
 
@@ -320,71 +378,36 @@ class TelegramService {
 //		}
 //	}
 
-	static InlineKeyboardMarkup keyboardBuilder(List<InlineKeyboardButton> buttons, Integer offset) {
-		def inlineKeyboard = new InlineKeyboardMarkup()
-		def row = []
-		buttons.each { button ->
-			row.add(button)
-			if (row.size() == offset) {
-				inlineKeyboard.addRow(row as InlineKeyboardButton[])
-				row = []
-			}
-		}
-		if (!row.isEmpty()) {
-			inlineKeyboard.addRow(row as InlineKeyboardButton[])
-		}
-		return inlineKeyboard
-	}
-
 	void sendSearchMessage(TelegramUser telegramUser, Boolean isPrise = false) {
 		if (isPrise) {
 			telegramUser.searchMessageId = telegramUser.lastBotMessageId + 1
 		} else {
 			telegramUser.searchMessageId = telegramUser.lastBotMessageId
 		}
+		telegramUser.searchMessageId = new MessageBuilder(bot)
+				.id(telegramUser.telegramId)
+				.messageId(telegramUser.searchMessageId)
+				.method(MessageBuilder.Method.EDIT)
+				.text("Ищем...")
+				.send()
 		repository.save(telegramUser)
-		editMessage(telegramUser.telegramId,
-				telegramUser.searchMessageId, "Ищем...")
 	}
 
-	void sendGreetingMessage(Long telegramId) {
+	void sendGreetingMessage(TelegramUser telegramUser) {
 		String text = """
 				|Привет это <i><u>PriceCheckerBot</u></i>
 				|Этот бот помогает отследить <b>изменение цен</b> на интересующие вас товары
 				""".stripMargin()
-		SendMessage request = new SendMessage(telegramId, text)
+		telegramUser.lastBotMessageId = new MessageBuilder(bot)
+				.id(telegramUser.telegramId)
+				.text(text)
+				.method(MessageBuilder.Method.SEND)
 				.parseMode(ParseMode.HTML)
-				.replyMarkup(keyboardBuilder([
-						new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name()),
+				.buttons(new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name()),
 						new InlineKeyboardButton("Посмотреть мои записи 🗒️").callbackData(State.SHOW_ITEMS.name()),
-						new InlineKeyboardButton("Редактировать мои записи📝").callbackData("edit=???")
-				], 1))
-		sendMessage(request, telegramId)
-	}
-
-	void deleteMessage(Long telegramId, Integer messageId) {
-		DeleteMessage deleteMessage = new DeleteMessage(telegramId, messageId)
-		bot.execute(deleteMessage)
-	}
-
-	void editMessage(Long telegramId, Integer messageId, String text, InlineKeyboardMarkup keyboard = null) {
-		EditMessageText editedMessage = new EditMessageText(telegramId, messageId, text)
-				.parseMode(ParseMode.HTML)
-		if (keyboard) {
-			editedMessage.replyMarkup(keyboard)
-		}
-		bot.execute(editedMessage)
-	}
-
-	void sendMessage(SendMessage request, Long telegramId) {
-		SendResponse response = bot.execute(request)
-		try {
-			TelegramUser telegramUser = repository.getByTelegramId(telegramId)
-			telegramUser.lastBotMessageId = response.message().messageId()
-			repository.save(telegramUser)
-		} catch (Exception e) {
-			logger.error(response?.toString() ?: e.message, e)
-		}
+						new InlineKeyboardButton("Редактировать мои записи📝").callbackData("edit=???"))
+				.keyboardOffset(1)
+				.send()
 	}
 
 }
