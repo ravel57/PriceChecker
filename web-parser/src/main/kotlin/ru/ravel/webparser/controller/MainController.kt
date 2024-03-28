@@ -73,18 +73,4 @@ class MainController(
 		}
 	}
 
-
-//	@PostMapping("get-name-class-atr")
-//	fun getNameClassAtr(@RequestBody parseInfo: ParseInfo): ResponseEntity<Any> {
-//		return try {
-//			ResponseEntity.ok().body(parserService.getNameClassAtr(parseInfo))
-//		} catch (e: ParserDoesntExistException) {
-//			logger.error(e.message, e)
-//			ResponseEntity.status(HttpStatus.NOT_FOUND).body(e.payload)
-//		} catch (e: Exception) {
-//			logger.error(e.message, e)
-//			ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
-//		}
-//	}
-
 }

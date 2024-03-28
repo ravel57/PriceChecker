@@ -45,9 +45,7 @@ class WebParserService(
 			repository.saveParser(getParserByJSoup(url))
 			throw ParserDoesntExistException("the parser is not configured for the selected store: $host")
 		}
-		val supplier = Suppliers.memoizeWithExpiration({
-			getProductByJSoup(url, parser)
-		}, 30, TimeUnit.MINUTES)
+		val supplier = Suppliers.memoizeWithExpiration({ getProductByJSoup(url, parser) }, 30, TimeUnit.MINUTES)
 		suppliers.computeIfAbsent(url, { supplier })
 		val parsedProduct: ParsedProduct = supplier.get()
 		saveParsedProduct(parsedProduct)

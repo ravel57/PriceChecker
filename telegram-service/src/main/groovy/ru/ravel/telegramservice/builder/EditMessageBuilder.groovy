@@ -86,8 +86,6 @@ class EditMessageBuilder extends MessageBuilder {
 		if (parseMode != null) {
 			message.parseMode(parseMode)
 		}
-		SendResponse response = bot.execute(message) as SendResponse
-		if (!response.ok)
-			throw new RuntimeException(response.description())
+		bot.execute(message)
 	}
 }

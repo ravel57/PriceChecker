@@ -129,7 +129,7 @@ class TelegramService {
 					sendGreetingMessage(telegramUser)
 					""
 				} else {
-					telegramUser.lastBotMessageId = new MessageBuilder(bot)
+					new MessageBuilder(bot)
 							.edit()
 							.telegramId(telegramUser.telegramId)
 							.messageId(telegramUser.lastBotMessageId)
@@ -270,11 +270,11 @@ class TelegramService {
 							.text(text)
 							.execute()
 					new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
-							.text("Пришли <b>цену</b> этого товара")
-							.method(MessageBuilder.Method.SEND)
-							.parseMode(ParseMode.HTML)
 							.send()
+							.telegramId(telegramUser.telegramId)
+							.text("Пришли <b>цену</b> этого товара")
+							.parseMode(ParseMode.HTML)
+							.execute()
 				}
 				case State.CLASS_PRICE_ART -> {
 					new MessageBuilder(bot)
