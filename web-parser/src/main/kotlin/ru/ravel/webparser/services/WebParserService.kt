@@ -66,6 +66,7 @@ class WebParserService(
 //		return parsedProduct
 //	}
 
+
 	fun getParser(parseInfo: ParseInfo): Parser {
 		val host = URL(parseInfo.url!!).host
 		if (!repository.isStoreParserExist(host)) {
@@ -133,7 +134,7 @@ class WebParserService(
 			val message = "the parser is not configured for the selected store: $url"
 			val price = if (parser.selectedPrice != null) {
 				val str = allElements.map { it.getElementsByAttributeValue("class", parser.selectedPrice!!.classAtr) }
-					.find { it.size > 0 }?.first()?.childNodes()?.joinToString { " " } ?: ""
+					.find { it.size > 0 }?.first()?.childNodes()?.joinToString(" ") ?: ""
 				stringToDouble(str)
 			} else {
 				throw ParserDoesntExistException(message)

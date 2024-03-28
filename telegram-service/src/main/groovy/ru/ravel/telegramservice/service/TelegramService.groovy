@@ -32,6 +32,7 @@ class TelegramService {
 	@Autowired
 	private PriceCheckerService checkerService
 
+
 	TelegramService() {
 		bot = new TelegramBot(System.getenv("bot_token"))
 		bot.setUpdatesListener(listener, exceptionHandler)
@@ -102,84 +103,56 @@ class TelegramService {
 	}
 
 
-	void stateHandler(TelegramUser telegramUser, String messageText) {
-		String text = switch (telegramUser.currentState) {
-			case State.LINK_ADDING -> {
-				sendSearchMessage(telegramUser)
-				telegramUser.parseInfo.url = messageText
-				def result = checkerService.getProduct(telegramUser.parseInfo.url)
-				if (result.isParserExist) {
-					new MessageBuilder(bot)
-							.delete()
-							.telegramId(telegramUser.telegramId)
-							.messageId(telegramUser.lastBotMessageId)
-							.execute()
-					telegramUser.currentState = State.NONE
+	String linkAddingHandler(TelegramUser telegramUser, String url) {
+		sendSearchMessage(telegramUser)
+		telegramUser.parseInfo.url = url
+		def result = checkerService.getProduct(telegramUser.parseInfo.url)
+		if (result.isParserExist) {
+			new MessageBuilder(bot)
+					.delete()
+					.telegramId(telegramUser.telegramId)
+					.messageId(telegramUser.lastBotMessageId)
+					.execute()
+			telegramUser.currentState = State.NONE
 
-					def text = """
+			def text = """
 							|<b>Готово!</b>
 							|<b><u>${result.parseInfoResult.name}</u></b>
 							|<b><u>${result.parseInfoResult.price}</u></b>
 							""".stripMargin()
-					telegramUser.lastBotMessageId = new MessageBuilder(bot)
-							.send()
-							.parseMode(ParseMode.HTML)
-							.telegramId(telegramUser.telegramId)
-							.text(text)
-							.execute()
-					sendGreetingMessage(telegramUser)
-					""
-				} else {
-					new MessageBuilder(bot)
-							.edit()
-							.telegramId(telegramUser.telegramId)
-							.messageId(telegramUser.lastBotMessageId)
-							.text("Пришли <u>ссылку</u> на товар\n<b><i>$messageText</i></b> - принято✅")
-							.parseMode(ParseMode.HTML)
-							.execute()
-					logger.debug(messageText) /*URL*/
-					telegramUser.currentState = State.NAME_ADDING
-					"<b>Парсер нужо настроить</b>\nПришли <i><u>полное название</u></i> товара со страницы"
-				}
-			}
-
-			case State.NAME_ADDING -> {
-				telegramUser.parseInfo.name = messageText
-				sendSearchMessage(telegramUser)
-				if (nameClassAdding(telegramUser)) {
-					""
-				}
-			}
-
-			case State.PRICE_ADDING -> {
-				telegramUser.parseInfo.price = messageText
-				sendSearchMessage(telegramUser, true)
-				if (priceClassAdding(telegramUser)) {
-					""
-				}
-			}
-
-			default -> ""
-		}
-		if (telegramUser.currentState != State.NONE && text != null && text != "") {
 			telegramUser.lastBotMessageId = new MessageBuilder(bot)
 					.send()
+					.parseMode(ParseMode.HTML)
 					.telegramId(telegramUser.telegramId)
 					.text(text)
+					.execute()
+			sendGreetingMessage(telegramUser)
+			return ""
+		} else {
+			new MessageBuilder(bot)
+					.edit()
+					.telegramId(telegramUser.telegramId)
+					.messageId(telegramUser.lastBotMessageId)
+					.text("Пришли <u>ссылку</u> на товар\n<b><i>$url</i></b> - принято✅")
 					.parseMode(ParseMode.HTML)
 					.execute()
+			logger.debug(url) /*URL*/
+			telegramUser.currentState = State.NAME_ADDING
+			return "<b>Парсер нужо настроить</b>\nПришли <i><u>полное название</u></i> товара со страницы"
 		}
-		repository.save(telegramUser)
 	}
 
-	boolean nameClassAdding(TelegramUser telegramUser) {
+
+	void nameAddingHandler(TelegramUser telegramUser, String messageText) {
+		telegramUser.parseInfo.name = messageText
+		sendSearchMessage(telegramUser)
 		telegramUser.parseInfo = checkerService.postProductName(telegramUser.parseInfo).parseInfoResult
+		repository.save(telegramUser)
 		if (telegramUser.parseInfo.nameClassAttributes.size() > 1) {
 			messageAskToUser("Что больше похоже на class названия?",
 					telegramUser,
 					telegramUser.parseInfo.nameClassAttributes,
-					State.CLASS_NAME_ART)
-			return false
+					State.CLASS_NAME_ART_ADDING)
 		} else if (telegramUser.parseInfo.nameClassAttributes.size() == 0) {
 			telegramUser.currentState = State.NAME_ADDING
 			new MessageBuilder(bot)
@@ -199,13 +172,14 @@ class TelegramService {
 					.text(text)
 					.parseMode(ParseMode.HTML)
 					.execute()
-			return false
-		} else {
-			return true
+			repository.save(telegramUser)
 		}
 	}
 
-	boolean priceClassAdding(TelegramUser telegramUser) {
+
+	void priceAddingHandler(TelegramUser telegramUser, String messageText) {
+		telegramUser.parseInfo.price = messageText
+		sendSearchMessage(telegramUser, true)
 		telegramUser.parseInfo = checkerService.postProductPrice(telegramUser.parseInfo).parseInfoResult
 		repository.save(telegramUser)
 		if (telegramUser.parseInfo.priceClassAttributes.size() > 1) {
@@ -213,9 +187,8 @@ class TelegramService {
 					"Что больше похоже на class цены?",
 					telegramUser,
 					telegramUser.parseInfo.priceClassAttributes,
-					State.CLASS_PRICE_ART
+					State.CLASS_PRICE_ART_ADDING
 			)
-			return false
 		} else if (telegramUser.parseInfo.priceClassAttributes.size() == 0) {
 			telegramUser.currentState = State.PRICE_ADDING
 			new MessageBuilder(bot)
@@ -235,11 +208,30 @@ class TelegramService {
 					.parseMode(ParseMode.HTML)
 					.execute()
 			telegramUser.currentState = State.LINK_ADDING
-			return false
-		} else {
-			return true
+			repository.save(telegramUser)
 		}
 	}
+
+
+	void stateHandler(TelegramUser telegramUser, String messageText) {
+		String text = telegramUser.currentState == State.LINK_ADDING
+				? linkAddingHandler(telegramUser, messageText)
+				: ""
+		switch (telegramUser.currentState) {
+			case State.NAME_ADDING -> nameAddingHandler(telegramUser, messageText)
+			case State.PRICE_ADDING -> priceAddingHandler(telegramUser, messageText)
+		}
+		if (telegramUser.currentState != State.NONE && text != null && !text.isEmpty()) {
+			telegramUser.lastBotMessageId = new MessageBuilder(bot)
+					.send()
+					.telegramId(telegramUser.telegramId)
+					.text(text)
+					.parseMode(ParseMode.HTML)
+					.execute()
+		}
+		repository.save(telegramUser)
+	}
+
 
 	private void callbackHandler(Update update, TelegramUser telegramUser) {
 		String callbackDataStr = update.callbackQuery().data()
@@ -249,7 +241,7 @@ class TelegramService {
 			SendMessage request
 			String[] callbackData = callbackDataStr.split("=")
 			switch (State.valueOf(callbackData[0])) {
-				case State.CLASS_NAME_ART -> {
+				case State.CLASS_NAME_ART_ADDING -> {
 					new MessageBuilder(bot)
 							.delete()
 							.telegramId(telegramUser.telegramId)
@@ -277,7 +269,7 @@ class TelegramService {
 							.parseMode(ParseMode.HTML)
 							.execute()
 				}
-				case State.CLASS_PRICE_ART -> {
+				case State.CLASS_PRICE_ART_ADDING -> {
 					new MessageBuilder(bot)
 							.delete()
 							.telegramId(telegramUser.telegramId)
@@ -297,15 +289,11 @@ class TelegramService {
 					telegramUser.lastBotMessageId = new MessageBuilder(bot)
 							.send()
 							.telegramId(telegramUser.telegramId)
-							.text("""
-									|<b>Настройка персера завершена!</b>
-									|${telegramUser.parseInfo.name}
-									|${telegramUser.parseInfo.price}
-									""".stripMargin())
+							.text("<b>Настройка персера завершена!</b>")
 							.parseMode(ParseMode.HTML)
 							.execute()
 					telegramUser.currentState = State.LINK_ADDING
-					sendGreetingMessage(telegramUser)
+					linkAddingHandler(telegramUser, telegramUser.parseInfo.url)
 				}
 			}
 			repository.save(telegramUser)
