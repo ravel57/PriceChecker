@@ -77,13 +77,13 @@ class MessageBuilder {
 
 	Integer send() {
 		if (id == null || method == null || (text == null && method in [Method.SEND, Method.EDIT]) ||
-				(messageId == null && method in [Method.EDIT, Method.DELETE])) {
+				(this.messageId == null && method in [Method.EDIT, Method.DELETE])) {
 			throw new NoSuchFieldException()
 		}
 		var message = switch (method) {
 			case Method.SEND -> new SendMessage(id, text)
-			case Method.EDIT -> new EditMessageText(id, messageId, text)
-			case Method.DELETE -> new DeleteMessage(id, messageId)
+			case Method.EDIT -> new EditMessageText(id, this.messageId, text)
+			case Method.DELETE -> new DeleteMessage(id, this.messageId)
 		}
 		if (buttons != null) {
 			def inlineKeyboard = new InlineKeyboardMarkup()
@@ -109,6 +109,11 @@ class MessageBuilder {
 				case Method.EDIT -> (message as EditMessageText).parseMode(parseMode)
 			}
 		}
-		return (bot.execute(message) as SendResponse).message().messageId()
+
+		SendResponse response = bot.execute(message) as SendResponse
+		if (response.ok)
+			return response.message().messageId()
+		else
+			throw new RuntimeException(response.description())
 	}
 }
