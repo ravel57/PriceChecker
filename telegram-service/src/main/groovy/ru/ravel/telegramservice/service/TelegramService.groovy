@@ -93,13 +93,12 @@ class TelegramService {
 			new InlineKeyboardButton(index + 1 as String).callbackData("$mode=$item")
 		}
 		new MessageBuilder(bot)
-				.method(MessageBuilder.Method.SEND)
-				.id(telegramUser.telegramId)
-				.text(vars)
-				.buttons(buttons)
-				.keyboardOffset(2)
-				.parseMode(ParseMode.HTML)
 				.send()
+				.telegramId(telegramUser.telegramId)
+				.text(vars)
+				.buttons(2, buttons)
+				.parseMode(ParseMode.HTML)
+				.execute()
 	}
 
 
@@ -111,10 +110,10 @@ class TelegramService {
 				def result = checkerService.getProduct(telegramUser.parseInfo.url)
 				if (result.isParserExist) {
 					new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
+							.delete()
+							.telegramId(telegramUser.telegramId)
 							.messageId(telegramUser.lastBotMessageId)
-							.method(MessageBuilder.Method.DELETE)
-							.send()
+							.execute()
 					telegramUser.currentState = State.NONE
 
 					def text = """
@@ -123,19 +122,20 @@ class TelegramService {
 							|<b><u>${result.parseInfoResult.price}</u></b>
 							""".stripMargin()
 					new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
-							.text(text)
 							.send()
+							.telegramId(telegramUser.telegramId)
+							.text(text)
+							.execute()
 					sendGreetingMessage(telegramUser)
 					""
 				} else {
-					new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
-							.method(MessageBuilder.Method.EDIT)
+					telegramUser.lastBotMessageId = new MessageBuilder(bot)
+							.edit()
+							.telegramId(telegramUser.telegramId)
 							.messageId(telegramUser.lastBotMessageId)
 							.text("Пришли <u>ссылку</u> на товар\n<b><i>$messageText</i></b> - принято✅")
 							.parseMode(ParseMode.HTML)
-							.send()
+							.execute()
 					logger.debug(messageText) /*URL*/
 					telegramUser.currentState = State.NAME_ADDING
 					"<b>Парсер нужо настроить</b>\nПришли <i><u>полное название</u></i> товара со страницы"
@@ -162,14 +162,12 @@ class TelegramService {
 		}
 		if (telegramUser.currentState != State.NONE && text != null && text != "") {
 			telegramUser.lastBotMessageId = new MessageBuilder(bot)
-					.id(telegramUser.telegramId)
-					.method(MessageBuilder.Method.SEND)
+					.send()
+					.telegramId(telegramUser.telegramId)
 					.text(text)
 					.parseMode(ParseMode.HTML)
-					.messageId(telegramUser.searchMessageId)
-					.send()
+					.execute()
 		}
-		repository.save(telegramUser)
 	}
 
 	boolean nameClassAdding(TelegramUser telegramUser) {
@@ -183,23 +181,22 @@ class TelegramService {
 		} else if (telegramUser.parseInfo.nameClassAttributes.size() == 0) {
 			telegramUser.currentState = State.NAME_ADDING
 			new MessageBuilder(bot)
-					.id(telegramUser.telegramId)
-					.method(MessageBuilder.Method.EDIT)
+					.edit()
+					.telegramId(telegramUser.telegramId)
 					.messageId(telegramUser.searchMessageId)
 					.text("Не найден❌")
 					.messageId(telegramUser.searchMessageId)
-					.send()
+					.execute()
 			def text = """
 					|Такого элемента <b>не нашлось</b>😥
 					|Проверьте <b><u>корректность отправленого названия</u></b> и попробуйте снова
 					""".stripMargin()
 			telegramUser.lastBotMessageId = new MessageBuilder(bot)
-					.id(telegramUser.telegramId)
-					.method(MessageBuilder.Method.SEND)
+					.send()
+					.telegramId(telegramUser.telegramId)
 					.text(text)
 					.parseMode(ParseMode.HTML)
-					.messageId(telegramUser.searchMessageId)
-					.send()
+					.execute()
 			return false
 		} else {
 			return true
@@ -220,21 +217,21 @@ class TelegramService {
 		} else if (telegramUser.parseInfo.priceClassAttributes.size() == 0) {
 			telegramUser.currentState = State.PRICE_ADDING
 			new MessageBuilder(bot)
-					.id(telegramUser.telegramId)
-					.method(MessageBuilder.Method.EDIT)
+					.edit()
+					.telegramId(telegramUser.telegramId)
 					.text("Не найден❌")
 					.messageId(telegramUser.searchMessageId)
-					.send()
+					.execute()
 			String text = """
 					|Такого элемента <b>не нашлось</b>😥
-					|Проверьте <b><u>корректность отправленой цены</u></b> и попробуйте снова
+					|Проверьте <b><u>корректность отправленой цены</u></b>  и попробуйте снова
 					""".stripMargin()
 			telegramUser.lastBotMessageId = new MessageBuilder(bot)
-					.id(telegramUser.telegramId)
-					.method(MessageBuilder.Method.SEND)
+					.send()
+					.telegramId(telegramUser.telegramId)
 					.text(text)
 					.parseMode(ParseMode.HTML)
-					.send()
+					.execute()
 			telegramUser.currentState = State.LINK_ADDING
 			return false
 		} else {
@@ -252,10 +249,10 @@ class TelegramService {
 			switch (State.valueOf(callbackData[0])) {
 				case State.CLASS_NAME_ART -> {
 					new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
+							.delete()
+							.telegramId(telegramUser.telegramId)
 							.messageId(telegramUser.lastBotMessageId)
-							.method(MessageBuilder.Method.DELETE)
-							.send()
+							.execute()
 					telegramUser.parseInfo = checkerService.postNameClassAtr(telegramUser.parseInfo, callbackData[-1])
 							.parseInfoResult
 					telegramUser.currentState = State.PRICE_ADDING
@@ -265,50 +262,47 @@ class TelegramService {
 							|<b><i>$telegramUser.parseInfo.name</i></b> - принято✅
 							""".stripMargin()
 					new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
-							.text(text)
+							.edit()
+							.telegramId(telegramUser.telegramId)
 							.parseMode(ParseMode.HTML)
-							.messageId(telegramUser.searchMessageId)
-							.method(MessageBuilder.Method.EDIT)
 							.text(text)
-							.send()
+							.messageId(telegramUser.searchMessageId)
+							.text(text)
+							.execute()
 					new MessageBuilder(bot)
 							.id(telegramUser.telegramId)
 							.text("Пришли <b>цену</b> этого товара")
 							.method(MessageBuilder.Method.SEND)
 							.parseMode(ParseMode.HTML)
 							.send()
-//					request = new SendMessage(telegramUser.telegramId, "Пришли <b>цену</b> этого товара")
-//							.parseMode(ParseMode.HTML)
-//					sendMessage(request, telegramUser.telegramId)
 				}
 				case State.CLASS_PRICE_ART -> {
 					new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
+							.delete()
+							.telegramId(telegramUser.telegramId)
 							.messageId(telegramUser.lastBotMessageId)
-							.method(MessageBuilder.Method.DELETE)
-							.send()
+							.execute()
 					telegramUser.parseInfo = checkerService.postPriceClassAtr(telegramUser.parseInfo, callbackData[-1])
 							.parseInfoResult
 					telegramUser.currentState = State.NONE
 
 					new MessageBuilder(bot)
-							.method(MessageBuilder.Method.EDIT)
-							.id(telegramUser.telegramId)
+							.edit()
+							.telegramId(telegramUser.telegramId)
 							.text("<b><i>$telegramUser.parseInfo.price</i></b> - принято✅")
 							.parseMode(ParseMode.HTML)
 							.messageId(telegramUser.searchMessageId)
-							.send()
+							.execute()
 					telegramUser.lastBotMessageId = new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
-							.text("""
-								  |<b>Настройка персера завершена!</b>
-								  |${telegramUser.parseInfo.name}
-								  |${telegramUser.parseInfo.price}
-								  """.stripMargin())
-							.method(MessageBuilder.Method.SEND)
-							.parseMode(ParseMode.HTML)
 							.send()
+							.telegramId(telegramUser.telegramId)
+							.text("""
+									|<b>Настройка персера завершена!</b>
+									|${telegramUser.parseInfo.name}
+									|${telegramUser.parseInfo.price}
+									""".stripMargin())
+							.parseMode(ParseMode.HTML)
+							.execute()
 					telegramUser.currentState = State.LINK_ADDING
 					sendGreetingMessage(telegramUser)
 				}
@@ -318,12 +312,12 @@ class TelegramService {
 			switch (State.valueOf(callbackDataStr)) {
 				case State.LINK_ADDING -> {
 					new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
+							.edit()
+							.telegramId(telegramUser.telegramId)
 							.messageId(telegramUser.lastBotMessageId)
-							.method(MessageBuilder.Method.EDIT)
 							.text("Пришли <u>ссылку</u> на товар")
 							.parseMode(ParseMode.HTML)
-							.send()
+							.execute()
 					telegramUser.currentState = State.LINK_ADDING
 					repository.save(telegramUser)
 				}
@@ -333,17 +327,16 @@ class TelegramService {
 					StringBuilder text = new StringBuilder("<i><b>Твои записи:</b></i>\n\n")
 							.append(items.indexed().collect { index, item -> "${index + 1}. $item" }.join("\n"))
 					new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
+							.edit()
+							.telegramId(telegramUser.telegramId)
 							.messageId(telegramUser.lastBotMessageId)
-							.method(MessageBuilder.Method.EDIT)
 							.text(text.toString())
 							.parseMode(ParseMode.HTML)
-							.buttons(items.indexed().collect { index, item ->
+							.buttons(3, items.indexed().collect { index, item ->
 								new InlineKeyboardButton("❌ ${index + 1}").callbackData("del=${index + 1}")
 							})
 							.addBackButton("назад")
-							.keyboardOffset(3)
-							.send()
+							.execute()
 				}
 
 				default -> {
@@ -355,10 +348,10 @@ class TelegramService {
 
 		} else if (callbackDataStr.startsWith("back")) {
 			new MessageBuilder(bot)
-					.id(telegramUser.telegramId)
+					.delete()
+					.telegramId(telegramUser.telegramId)
 					.messageId(telegramUser.lastBotMessageId)
-					.method(MessageBuilder.Method.DELETE)
-					.send()
+					.execute()
 			sendGreetingMessage(telegramUser)
 		}
 	}
@@ -394,11 +387,11 @@ class TelegramService {
 			telegramUser.searchMessageId = telegramUser.lastBotMessageId
 		}
 		new MessageBuilder(bot)
-				.id(telegramUser.telegramId)
+				.edit()
+				.telegramId(telegramUser.telegramId)
 				.messageId(telegramUser.searchMessageId)
-				.method(MessageBuilder.Method.EDIT)
 				.text("Ищем...")
-				.send()
+				.execute()
 		repository.save(telegramUser)
 	}
 
@@ -408,15 +401,15 @@ class TelegramService {
 				|Этот бот помогает отследить <b>изменение цен</b> на интересующие вас товары
 				""".stripMargin()
 		telegramUser.lastBotMessageId = new MessageBuilder(bot)
-				.id(telegramUser.telegramId)
+				.send()
+				.telegramId(telegramUser.telegramId)
 				.text(text)
-				.method(MessageBuilder.Method.SEND)
 				.parseMode(ParseMode.HTML)
-				.buttons(new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name()),
+				.buttons(1,
+						new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name()),
 						new InlineKeyboardButton("Посмотреть мои записи 🗒️").callbackData(State.SHOW_ITEMS.name()),
 						new InlineKeyboardButton("Редактировать мои записи📝").callbackData("edit=???"))
-				.keyboardOffset(1)
-				.send()
+				.execute()
 	}
 
 }

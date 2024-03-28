@@ -84,7 +84,6 @@ class PriceCheckerService {
 			case HttpStatus.SC_NOT_FOUND -> {
 				/*FIXME*/
 				new Result(false, null)
-
 			}
 			case HttpStatus.SC_INTERNAL_SERVER_ERROR -> {
 				logger.error("INTERNAL_SERVER_ERROR")
