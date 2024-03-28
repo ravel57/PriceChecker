@@ -3,13 +3,13 @@ package ru.ravel.telegramservice.dto
 enum Command {
 	START("/start")
 
-	private String command
+	private String text
 
-	Command(String command) {
-		this.command = command
+	Command(String text) {
+		this.text = text
 	}
 
-	static Command getByCommand(String command) {
-		return values().find { it.command == command }
+	static Command getByText(String command) {
+		return values().find { it.text == command }
 	}
 }

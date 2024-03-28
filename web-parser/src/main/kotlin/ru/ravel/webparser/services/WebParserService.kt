@@ -127,7 +127,7 @@ class WebParserService(
 			val message = "the parser is not configured for the selected store: $url"
 			val price = if (parser.selectedPrice != null) {
 				val str = allElements.map { it.getElementsByAttributeValue("class", parser.selectedPrice!!.classAtr) }
-					.find { it.size > 0 }?.first()?.childNodes().toString()
+					.find { it.size > 0 }?.first()?.childNodes()?.joinToString { " " } ?: ""
 				stringToDouble(str)
 			} else {
 				throw ParserDoesntExistException(message)
