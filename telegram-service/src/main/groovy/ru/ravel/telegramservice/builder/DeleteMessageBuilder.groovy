@@ -29,10 +29,7 @@ class DeleteMessageBuilder extends MessageBuilder {
 		}
 		var message = new DeleteMessage(telegramId, this.messageId)
 
-		SendResponse response = bot.execute(message) as SendResponse
-		if (!response.ok) {
-			throw new RuntimeException(response.description())
-		}
+		bot.execute(message)
 	}
 
 }

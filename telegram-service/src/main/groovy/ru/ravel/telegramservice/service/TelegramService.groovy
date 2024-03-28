@@ -92,7 +92,7 @@ class TelegramService {
 		def buttons = variables.indexed().collect { index, item ->
 			new InlineKeyboardButton(index + 1 as String).callbackData("$mode=$item")
 		}
-		new MessageBuilder(bot)
+		telegramUser.lastBotMessageId = new MessageBuilder(bot)
 				.send()
 				.telegramId(telegramUser.telegramId)
 				.text(vars)
@@ -121,15 +121,16 @@ class TelegramService {
 							|<b><u>${result.parseInfoResult.name}</u></b>
 							|<b><u>${result.parseInfoResult.price}</u></b>
 							""".stripMargin()
-					new MessageBuilder(bot)
+					telegramUser.lastBotMessageId = new MessageBuilder(bot)
 							.send()
+							.parseMode(ParseMode.HTML)
 							.telegramId(telegramUser.telegramId)
 							.text(text)
 							.execute()
 					sendGreetingMessage(telegramUser)
 					""
 				} else {
-					telegramUser.lastBotMessageId = new MessageBuilder(bot)
+					new MessageBuilder(bot)
 							.edit()
 							.telegramId(telegramUser.telegramId)
 							.messageId(telegramUser.lastBotMessageId)
@@ -168,6 +169,7 @@ class TelegramService {
 					.parseMode(ParseMode.HTML)
 					.execute()
 		}
+		repository.save(telegramUser)
 	}
 
 	boolean nameClassAdding(TelegramUser telegramUser) {
@@ -267,14 +269,13 @@ class TelegramService {
 							.parseMode(ParseMode.HTML)
 							.text(text)
 							.messageId(telegramUser.searchMessageId)
-							.text(text)
 							.execute()
-					new MessageBuilder(bot)
-							.id(telegramUser.telegramId)
-							.text("Пришли <b>цену</b> этого товара")
-							.method(MessageBuilder.Method.SEND)
-							.parseMode(ParseMode.HTML)
+					telegramUser.lastBotMessageId = new MessageBuilder(bot)
 							.send()
+							.telegramId(telegramUser.telegramId)
+							.text("Пришли <b>цену</b> этого товара")
+							.parseMode(ParseMode.HTML)
+							.execute()
 				}
 				case State.CLASS_PRICE_ART -> {
 					new MessageBuilder(bot)
@@ -382,7 +383,7 @@ class TelegramService {
 
 	void sendSearchMessage(TelegramUser telegramUser, Boolean isPrise = false) {
 		if (isPrise) {
-			telegramUser.searchMessageId = telegramUser.lastBotMessageId + 1
+			telegramUser.searchMessageId = telegramUser.lastBotMessageId
 		} else {
 			telegramUser.searchMessageId = telegramUser.lastBotMessageId
 		}
