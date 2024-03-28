@@ -36,8 +36,8 @@ class TelegramUser {
 	@Column(name = "last_bot_message_id")
 	Integer lastBotMessageId
 
-	@Column(name = "callback_query_id")
-	String callbackQueryId
+	@Column(name = "search_message_id")
+	Integer searchMessageId
 
 	@Column(name = "parse_info")
 	@JdbcTypeCode(SqlTypes.JSON)

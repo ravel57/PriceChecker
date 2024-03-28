@@ -15,7 +15,6 @@ import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.stereotype.Service
 import ru.ravel.core.dto.ParseInfo
 import ru.ravel.telegramservice.dto.Command
-import ru.ravel.telegramservice.dto.CallbackMode
 import ru.ravel.telegramservice.dto.State
 import ru.ravel.telegramservice.entity.TelegramUser
 import ru.ravel.telegramservice.repository.TelegramUserRepository
@@ -60,7 +59,7 @@ class TelegramService {
 						repository.save(telegramUser)
 
 						if (update?.message()?.text() && messageText.startsWith('/')) {
-							switch (Command.getByCommand(messageText)) {
+							switch (Command.getByText(messageText)) {
 								case Command.START -> {
 									sendGreetingMessage(telegramId)
 								}
@@ -102,13 +101,18 @@ class TelegramService {
 	void stateHandler(TelegramUser telegramUser, String messageText) {
 		String text = switch (telegramUser.currentState) {
 			case State.LINK_ADDING -> {
+				sendSearchMessage(telegramUser)
 				telegramUser.parseInfo.url = messageText
 				def result = checkerService.getProduct(telegramUser.parseInfo.url)
 				if (result.isParserExist) {
 					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
 					telegramUser.currentState = State.NONE
 					SendMessage request = new SendMessage(telegramUser.telegramId,
-							"<b>Готово!</b>\n\n${result.parseInfoResult.name}\n\n${result.parseInfoResult.price}")
+							"""
+							|<b>Готово!</b>
+							|<b><u>${result.parseInfoResult.name}</u></b>
+							|<b><u>${result.parseInfoResult.price}</u></b>
+							""".stripMargin())
 							.parseMode(ParseMode.HTML)
 					sendMessage(request, telegramUser.telegramId)
 					sendGreetingMessage(telegramUser.telegramId)
@@ -125,81 +129,135 @@ class TelegramService {
 
 			case State.NAME_ADDING -> {
 				telegramUser.parseInfo.name = messageText
-				logger.debug(messageText) /*Name*/
-				logger.debug(telegramUser.parseInfo.toString()) /*Name*/
-				telegramUser.parseInfo = checkerService.postProductName(telegramUser.parseInfo).parseInfoResult
-				editMessage(telegramUser.telegramId,
-						telegramUser.lastBotMessageId,
-						"""
-						|Пришли <i><u>полное название</u></i> товара со страницы
-						|<b><i>$messageText</i></b> - принято✅
-						""".stripMargin())
-				sendMessage(
-						messageAskToUser("Что больше похоже на класс названия?",
-								telegramUser,
-								telegramUser.parseInfo.nameClassAttributes,
-								CallbackMode.CLASS_NAME_ART.name()),
-						telegramUser.telegramId)
-				telegramUser.currentState = State.PRICE_ADDING
-				"Пришли цену этого товара"
+				sendSearchMessage(telegramUser)
+				if (nameClassAdding(telegramUser)) {
+					""
+				}
 			}
 
 			case State.PRICE_ADDING -> {
 				telegramUser.parseInfo.price = messageText
-				telegramUser.parseInfo = checkerService.postProductPrice(telegramUser.parseInfo).parseInfoResult
-				editMessage(telegramUser.telegramId,
-						telegramUser.lastBotMessageId,
-						"Пришли цену этого товара\n<b><i>$messageText</i></b> - принято✅")
-				logger.debug(messageText) /*Price*/
-				sendMessage(
-						messageAskToUser(
-								"Что больше похоже на class цены?",
-								telegramUser,
-								telegramUser.parseInfo.priceClassAttributes,
-								CallbackMode.CLASS_PRICE_ART.name()
-						),
-						telegramUser.telegramId
-				)
-//					SendMessage request = new SendMessage(
-//							telegramUser.telegramId,
-//							"<b>Настройка персера завершена!</b>\n\n${info.parseInfoResult.name}\n\n${info.parseInfoResult.price}"
-//					)
-//							.parseMode(ParseMode.HTML)
-//					sendMessage(request, telegramUser.telegramId)
-				telegramUser.currentState = State.NONE
-				sendGreetingMessage(telegramUser.telegramId)
-				""
-			}
-
-			case State.NONE -> {
-				throw new IllegalStateException()
-			}
-
-			case State.SHOW_ITEMS -> {
-				throw new IllegalStateException()
+				sendSearchMessage(telegramUser, true)
+				if (priceClassAdding(telegramUser)) {
+					""
+				}
 			}
 		}
 		repository.save(telegramUser)
-		if (telegramUser.currentState != State.NONE) {
+		if (telegramUser.currentState != State.NONE && text != null && text != "") {
 			SendMessage request = new SendMessage(telegramUser.telegramId, text)
 					.parseMode(ParseMode.HTML)
 			sendMessage(request, telegramUser.telegramId)
 		}
 	}
 
+	boolean nameClassAdding(TelegramUser telegramUser) {
+		telegramUser.parseInfo = checkerService.postProductName(telegramUser.parseInfo).parseInfoResult
+		if (telegramUser.parseInfo.nameClassAttributes.size() > 1) {
+			sendMessage(
+					messageAskToUser("Что больше похоже на класс названия?",
+							telegramUser,
+							telegramUser.parseInfo.nameClassAttributes,
+							State.CLASS_NAME_ART.name()),
+					telegramUser.telegramId)
+			return false
+		} else if (telegramUser.parseInfo.nameClassAttributes.size() == 0) {
+			telegramUser.currentState = State.NAME_ADDING
+			editMessage(
+					telegramUser.telegramId,
+					telegramUser.searchMessageId,
+					"Не найден❌")
+			SendMessage request = new SendMessage(
+					telegramUser.telegramId,
+					"""
+					|Такого элемента <b>не нашлось</b>😥
+					|Проверьте <b><u>корректность отправленого названия</u></b> и попробуйте снова
+					""".stripMargin()).parseMode(ParseMode.HTML)
+			sendMessage(request, telegramUser.telegramId)
+			return false
+		} else {
+			return true
+		}
+	}
+
+	boolean priceClassAdding(TelegramUser telegramUser) {
+		telegramUser.parseInfo = checkerService.postProductPrice(telegramUser.parseInfo).parseInfoResult
+		repository.save(telegramUser)
+		if (telegramUser.parseInfo.priceClassAttributes.size() > 1) {
+			sendMessage(
+					messageAskToUser(
+							"Что больше похоже на class цены?",
+							telegramUser,
+							telegramUser.parseInfo.priceClassAttributes,
+							State.CLASS_PRICE_ART.name()
+					),
+					telegramUser.telegramId
+			)
+			return false
+		} else if (telegramUser.parseInfo.priceClassAttributes.size() == 0) {
+			telegramUser.currentState = State.PRICE_ADDING
+			editMessage(
+					telegramUser.telegramId,
+					telegramUser.searchMessageId,
+					"Не найден❌")
+			SendMessage request = new SendMessage(
+					telegramUser.telegramId,
+					"""
+					|Такого элемента <b>не нашлось</b>😥
+					|Проверьте <b><u>корректность отправленой цены</u></b>  и попробуйте снова
+					""".stripMargin()).parseMode(ParseMode.HTML)
+			sendMessage(request, telegramUser.telegramId)
+			return false
+		} else {
+			return true
+		}
+	}
+
 	private void callbackHandler(Update update, TelegramUser telegramUser) {
 		String callbackDataStr = update.callbackQuery().data()
-		telegramUser.callbackQueryId = update.callbackQuery().id()
 		telegramUser.lastBotMessageId = update.callbackQuery().message().messageId()
 		repository.save(telegramUser)
 		if (callbackDataStr.startsWith("CLASS")) {
+			SendMessage request
 			String[] callbackData = callbackDataStr.split("=")
-			switch (CallbackMode.valueOf(callbackData[0])) {
-				case CallbackMode.CLASS_PRICE_ART -> {
-					telegramUser.parseInfo = checkerService.postPriceClassAtr(telegramUser.parseInfo, callbackData[-1]).parseInfoResult
+			switch (State.valueOf(callbackData[0])) {
+				case State.CLASS_NAME_ART -> {
+					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
+					telegramUser.parseInfo = checkerService.postNameClassAtr(telegramUser.parseInfo, callbackData[-1])
+							.parseInfoResult
+					telegramUser.currentState = State.PRICE_ADDING
+
+					editMessage(telegramUser.telegramId,
+							telegramUser.searchMessageId,
+							"""
+							|Пришли <i><u>полное название</u></i> товара со страницы
+							|<b><i>$telegramUser.parseInfo.name</i></b> - принято✅
+							""".stripMargin()
+					)
+					request = new SendMessage(telegramUser.telegramId, "Пришли <b>цену</b> этого товара")
+							.parseMode(ParseMode.HTML)
+					sendMessage(request, telegramUser.telegramId)
 				}
-				case CallbackMode.CLASS_NAME_ART -> {
-					telegramUser.parseInfo = checkerService.postNameClassAtr(telegramUser.parseInfo, callbackData[-1]).parseInfoResult
+				case State.CLASS_PRICE_ART -> {
+					deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
+					telegramUser.parseInfo = checkerService.postPriceClassAtr(telegramUser.parseInfo, callbackData[-1])
+							.parseInfoResult
+					telegramUser.currentState = State.NONE
+
+					editMessage(telegramUser.telegramId, telegramUser.searchMessageId,
+							"<b><i>$telegramUser.parseInfo.price</i></b> - принято✅"
+					)
+
+					request = new SendMessage(
+							telegramUser.telegramId,
+							"""
+							|<b>Настройка персера завершена!</b>
+							|${telegramUser.parseInfo.name}
+							|${telegramUser.parseInfo.price}
+							""".stripMargin()
+					).parseMode(ParseMode.HTML)
+					sendMessage(request, telegramUser.telegramId)
+					sendGreetingMessage(telegramUser.telegramId)
 				}
 			}
 			repository.save(telegramUser)
@@ -228,26 +286,14 @@ class TelegramService {
 				}
 			}
 		} else if (callbackDataStr.startsWith("del")) {
-			logger.debug(callbackDataStr) /*тут должно быть удаление записи*/
+			String[] callbackData = callbackDataStr.split("=")
+			logger.debug(callbackData[-1]) /*тут должно быть удаление записи*/
 
 		} else if (callbackDataStr.startsWith("back")) {
 			deleteMessage(telegramUser.telegramId, telegramUser.lastBotMessageId)
 			sendGreetingMessage(telegramUser.telegramId)
 
 		}
-	}
-
-
-	void sendGreetingMessage(Long telegramId) {
-		String text = """
-				|Привет это <i><u>PriceCheckerBot</u></i>
-				|Этот бот помогает отследить <b>изменение цен</b> на интересующие вас товары
-				""".stripMargin()
-		SendMessage request = new SendMessage(telegramId, text)
-				.parseMode(ParseMode.HTML)
-				.replyMarkup(new InlineKeyboardMarkup([new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name()),
-													   new InlineKeyboardButton("Посмотреть мои записи 🗒️").callbackData(State.SHOW_ITEMS.name())] as InlineKeyboardButton[]))
-		sendMessage(request, telegramId)
 	}
 
 	private ExceptionHandler exceptionHandler = new ExceptionHandler() {
@@ -262,17 +308,17 @@ class TelegramService {
 		}
 	}
 
-	private Callback<SendMessage, SendResponse> callback = new Callback<SendMessage, SendResponse>() {
-		@Override
-		void onResponse(SendMessage request, SendResponse response) {
-			logger.debug("callback: onResponse")
-		}
-
-		@Override
-		void onFailure(SendMessage request, IOException e) {
-			logger.debug("callback: onFailure")
-		}
-	}
+//	private Callback<SendMessage, SendResponse> callback = new Callback<SendMessage, SendResponse>() {
+//		@Override
+//		void onResponse(SendMessage request, SendResponse response) {
+//			logger.debug("callback: onResponse")
+//		}
+//
+//		@Override
+//		void onFailure(SendMessage request, IOException e) {
+//			logger.debug("callback: onFailure")
+//		}
+//	}
 
 	static InlineKeyboardMarkup keyboardBuilder(List<InlineKeyboardButton> buttons, Integer offset) {
 		def inlineKeyboard = new InlineKeyboardMarkup()
@@ -288,6 +334,32 @@ class TelegramService {
 			inlineKeyboard.addRow(row as InlineKeyboardButton[])
 		}
 		return inlineKeyboard
+	}
+
+	void sendSearchMessage(TelegramUser telegramUser, Boolean isPrise = false) {
+		if (isPrise) {
+			telegramUser.searchMessageId = telegramUser.lastBotMessageId + 1
+		} else {
+			telegramUser.searchMessageId = telegramUser.lastBotMessageId
+		}
+		repository.save(telegramUser)
+		editMessage(telegramUser.telegramId,
+				telegramUser.searchMessageId, "Ищем...")
+	}
+
+	void sendGreetingMessage(Long telegramId) {
+		String text = """
+				|Привет это <i><u>PriceCheckerBot</u></i>
+				|Этот бот помогает отследить <b>изменение цен</b> на интересующие вас товары
+				""".stripMargin()
+		SendMessage request = new SendMessage(telegramId, text)
+				.parseMode(ParseMode.HTML)
+				.replyMarkup(keyboardBuilder([
+						new InlineKeyboardButton("Добавить item💎").callbackData(State.LINK_ADDING.name()),
+						new InlineKeyboardButton("Посмотреть мои записи 🗒️").callbackData(State.SHOW_ITEMS.name()),
+						new InlineKeyboardButton("Редактировать мои записи📝").callbackData("edit=???")
+				], 1))
+		sendMessage(request, telegramId)
 	}
 
 	void deleteMessage(Long telegramId, Integer messageId) {
