@@ -91,7 +91,7 @@ class TelegramService {
 				.collect { index, variable -> "<b>[${index + 1}]</b>\n$variable" }
 				.join('\n\n')
 		def buttons = variables.indexed().collect { index, item ->
-			new InlineKeyboardButton(index + 1 as String).callbackData("$mode=$item")
+			new InlineKeyboardButton(index + 1 as String).callbackData("$mode=$index")
 		}
 		telegramUser.lastBotMessageId = new MessageBuilder(bot)
 				.send()
@@ -151,12 +151,12 @@ class TelegramService {
 		sendSearchMessage(telegramUser)
 		telegramUser.parseInfo = checkerService.postProductName(telegramUser.parseInfo).parseInfoResult
 		repository.save(telegramUser)
-		if (telegramUser.parseInfo.nameClassAttributes.size() > 1) {
+		if (telegramUser.parseInfo.nameClassAttributes.size() > 0) {
 			messageAskToUser("Что больше похоже на class названия?",
 					telegramUser,
 					telegramUser.parseInfo.nameClassAttributes,
 					State.CLASS_NAME_ART_ADDING)
-		} else if (telegramUser.parseInfo.nameClassAttributes.size() == 0) {
+		} else if (telegramUser.parseInfo.nameClassAttributes.size() > 0) {
 			telegramUser.currentState = State.NAME_ADDING
 			new MessageBuilder(bot)
 					.edit()
@@ -185,7 +185,7 @@ class TelegramService {
 		sendSearchMessage(telegramUser)
 		telegramUser.parseInfo = checkerService.postProductPrice(telegramUser.parseInfo).parseInfoResult
 		repository.save(telegramUser)
-		if (telegramUser.parseInfo.priceClassAttributes.size() > 1) {
+		if (telegramUser.parseInfo.priceClassAttributes.size() > 0) {
 			messageAskToUser(
 					"Что больше похоже на class цены?",
 					telegramUser,
@@ -217,15 +217,11 @@ class TelegramService {
 
 
 	void stateHandler(TelegramUser telegramUser, String messageText) {
-
 		switch (telegramUser.currentState) {
-
 			case State.LINK_ADDING -> linkAddingHandler(telegramUser, messageText)
 			case State.NAME_ADDING -> nameAddingHandler(telegramUser, messageText)
 			case State.PRICE_ADDING -> priceAddingHandler(telegramUser, messageText)
-
 		}
-
 		repository.save(telegramUser)
 	}
 
@@ -235,7 +231,9 @@ class TelegramService {
 				.telegramId(telegramUser.telegramId)
 				.messageId(telegramUser.lastBotMessageId)
 				.execute()
-		telegramUser.parseInfo = checkerService.postNameClassAtr(telegramUser.parseInfo, callbackData[-1])
+
+		String nameClassAttribute = telegramUser.parseInfo.nameClassAttributes[callbackData[-1].toInteger()]
+		telegramUser.parseInfo = checkerService.postNameClassAtr(telegramUser.parseInfo, nameClassAttribute)
 				.parseInfoResult
 		telegramUser.currentState = State.PRICE_ADDING
 
@@ -264,7 +262,8 @@ class TelegramService {
 				.telegramId(telegramUser.telegramId)
 				.messageId(telegramUser.lastBotMessageId)
 				.execute()
-		telegramUser.parseInfo = checkerService.postPriceClassAtr(telegramUser.parseInfo, callbackData[-1])
+		String priceClassAttribute = telegramUser.parseInfo.priceClassAttributes[callbackData[-1].toInteger()]
+		telegramUser.parseInfo = checkerService.postPriceClassAtr(telegramUser.parseInfo, priceClassAttribute)
 				.parseInfoResult
 		telegramUser.currentState = State.NONE
 
@@ -323,25 +322,18 @@ class TelegramService {
 			SendMessage request
 			String[] callbackData = callbackDataStr.split("=")
 			switch (State.valueOf(callbackData[0])) {
-
 				case State.CLASS_NAME_ART_ADDING -> classNameArtHandler(telegramUser, callbackData)
 				case State.CLASS_PRICE_ART_ADDING -> classPriceArtHandler(telegramUser, callbackData)
-
 			}
 			repository.save(telegramUser)
 		} else if (!callbackDataStr.startsWith("del") && !callbackDataStr.startsWith("back")) {
 			switch (State.valueOf(callbackDataStr)) {
-
 				case State.LINK_ADDING -> callbackLinkAddingHandler(telegramUser)
 				case State.SHOW_ITEMS -> callbackShowItemHandler(telegramUser)
-
-				default -> {
-				}
 			}
 		} else if (callbackDataStr.startsWith("del")) {
 			String[] callbackData = callbackDataStr.split("=")
 			logger.debug(callbackData[-1]) /*тут должно быть удаление записи*/
-
 		} else if (callbackDataStr.startsWith("back")) {
 			new MessageBuilder(bot)
 					.delete()
@@ -377,6 +369,7 @@ class TelegramService {
 //	}
 
 	void sendSearchMessage(TelegramUser telegramUser) {
+		telegramUser.searchMessageId = telegramUser.lastBotMessageId
 		new MessageBuilder(bot)
 				.edit()
 				.telegramId(telegramUser.telegramId)

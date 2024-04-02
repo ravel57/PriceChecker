@@ -43,6 +43,7 @@ dependencies {
 //  developmentOnly 'org.springframework.boot:spring-boot-docker-compose:3.2.3'
 	annotationProcessor 'org.projectlombok:lombok'
 	implementation 'org.jsoup:jsoup:1.17.2'
+	implementation 'org.seleniumhq.selenium:selenium-java:4.19.1'
 	
 	implementation 'ru.ravel:core:1'
 

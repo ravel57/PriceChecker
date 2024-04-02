@@ -19,4 +19,6 @@ data class ParsedProductPrice(
 	var idAtr: String = "",
 
 	var classAtr: String = "",
+
+	var itemprop: String = "",
 )

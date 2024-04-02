@@ -11,12 +11,14 @@ import ru.ravel.core.dto.ParseInfo
 import ru.ravel.core.exception.ParserDoesntExistException
 import ru.ravel.webparser.services.WebParserService
 
+
 @RestController("")
 class MainController(
 	val parserService: WebParserService,
 ) {
 
 	val logger: Logger = LoggerFactory.getLogger(this::class.java)
+
 
 	@PostMapping("/parse-by-url")
 	fun getProductByUrl(@RequestBody url: String): ResponseEntity<Any> {
@@ -31,20 +33,22 @@ class MainController(
 		}
 	}
 
-	@PostMapping("/set-price")
-	fun postPrice(@RequestBody parseInfo: ParseInfo): ResponseEntity<Any> {
+
+	@PostMapping("/set-name")
+	fun postName(@RequestBody parseInfo: ParseInfo): ResponseEntity<Any> {
 		try {
-			return ResponseEntity.ok().body(parserService.postPrice(parseInfo))
+			return ResponseEntity.ok().body(parserService.postName(parseInfo))
 		} catch (e: Exception) {
 			logger.error(e.message, e)
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()
 		}
 	}
 
-	@PostMapping("/set-name")
-	fun postName(@RequestBody parseInfo: ParseInfo): ResponseEntity<Any> {
+
+	@PostMapping("/set-price")
+	fun postPrice(@RequestBody parseInfo: ParseInfo): ResponseEntity<Any> {
 		try {
-			return ResponseEntity.ok().body(parserService.postName(parseInfo))
+			return ResponseEntity.ok().body(parserService.postPrice(parseInfo))
 		} catch (e: Exception) {
 			logger.error(e.message, e)
 			return ResponseEntity.status(HttpStatus.INTERNAL_SERVER_ERROR).build()

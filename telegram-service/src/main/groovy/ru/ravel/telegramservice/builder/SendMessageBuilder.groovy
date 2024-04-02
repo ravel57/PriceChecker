@@ -74,10 +74,10 @@ class SendMessageBuilder extends MessageBuilder {
 			if (!row.isEmpty()) {
 				inlineKeyboard.addRow(row as InlineKeyboardButton[])
 			}
-			(message as SendMessage).replyMarkup(inlineKeyboard)
+			message.replyMarkup(inlineKeyboard)
 		}
 		if (parseMode != null) {
-			(message as SendMessage).parseMode(parseMode)
+			message.parseMode(parseMode)
 		}
 
 		SendResponse response = bot.execute(message) as SendResponse

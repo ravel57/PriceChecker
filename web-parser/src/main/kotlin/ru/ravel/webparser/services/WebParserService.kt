@@ -7,6 +7,9 @@ import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
 import org.jsoup.nodes.TextNode
 import org.jsoup.select.Elements
+import org.openqa.selenium.By
+import org.openqa.selenium.WebDriver
+import org.openqa.selenium.firefox.FirefoxDriver
 import org.slf4j.LoggerFactory
 import org.springframework.beans.factory.annotation.Autowired
 import org.springframework.kafka.core.KafkaTemplate
@@ -22,6 +25,7 @@ import java.net.URL
 import java.util.*
 import java.util.concurrent.TimeUnit
 import java.util.function.Predicate
+
 
 @Service
 class WebParserService(
@@ -42,10 +46,10 @@ class WebParserService(
 		val parser = if (repository.isStoreParserExist(host)) {
 			repository.getParser(host)
 		} else {
-			repository.saveParser(getParserByJSoup(url))
+			repository.saveParser(getParser(url))
 			throw ParserDoesntExistException("the parser is not configured for the selected store: $host")
 		}
-		val supplier = Suppliers.memoizeWithExpiration({ getProductByJSoup(url, parser) }, 30, TimeUnit.MINUTES)
+		val supplier = Suppliers.memoizeWithExpiration({ getProductBySelenium(url, parser) }, 30, TimeUnit.MINUTES)
 		suppliers.computeIfAbsent(url, { supplier })
 		val parsedProduct: ParsedProduct = supplier.get()
 		saveParsedProduct(parsedProduct)
@@ -67,13 +71,27 @@ class WebParserService(
 //	}
 
 
-	fun getParser(parseInfo: ParseInfo): Parser {
+	@Throws(ParserDoesntExistException::class)
+	private fun getParser(url: String): Parser {
+		try {
+			val host = URI(url).host
+			return Parser(storeUrl = host)
+		} catch (e: IOException) {
+			logger.error("parsing exception: ${e.message}")
+			throw RuntimeException(e.message)
+		} catch (e: Exception) {
+			logger.error("another exception: ${e.message}")
+			throw RuntimeException(e.message)
+		}
+	}
+
+	private fun getParser(parseInfo: ParseInfo): Parser {
 		val host = URL(parseInfo.url!!).host
 		if (!repository.isStoreParserExist(host)) {
 			throw ParserDoesntExistException("the parser is not configured for the selected store: $host")
 		}
 		val parser = repository.getParser(host)
-		val tmpParser = getParserByJSoup(parseInfo)
+		val tmpParser = getParserBySelenium(parseInfo)
 		parser.apply {
 			this.allNames = tmpParser.allNames
 			this.allPrices = tmpParser.allPrices
@@ -132,6 +150,12 @@ class WebParserService(
 			val document = Jsoup.connect(url).followRedirects(true).timeout(60_000).get()
 			val allElements = document.body().allElements
 			val message = "the parser is not configured for the selected store: $url"
+			val name = if (parser.selectedName != null) {
+				allElements.map { it.getElementsByAttributeValue("class", parser.selectedName!!.classAtr) }
+					.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
+			} else {
+				throw ParserDoesntExistException(message)
+			}
 			val price = if (parser.selectedPrice != null) {
 				val str = allElements.map { it.getElementsByAttributeValue("class", parser.selectedPrice!!.classAtr) }
 					.find { it.size > 0 }?.first()?.childNodes()?.joinToString(" ") ?: ""
@@ -139,10 +163,33 @@ class WebParserService(
 			} else {
 				throw ParserDoesntExistException(message)
 			}
+			return ParsedProduct(name = name, price = price)
+		} catch (e: IOException) {
+			logger.error("parsing exception: ${e.message}")
+			throw NullPointerException()
+		}
+	}
+
+
+	private fun getProductBySelenium(url: String, parser: Parser): ParsedProduct {
+		try {
+			val driver: WebDriver = FirefoxDriver()
+			driver.manage().timeouts().implicitWaitTimeout
+			driver.get(url)
+			Thread.sleep(5_000)
+			val message = "the parser is not configured for the selected store: $url"
 			val name = if (parser.selectedName != null) {
-				allElements.map { it.getElementsByAttributeValue("class", parser.selectedName!!.classAtr) }
-					.find { it.size > 0 }?.first()?.childNodes()?.first().toString().trim()
+				val classAtr = '.' + parser.selectedName!!.classAtr.replace(' ', '.')
+				driver.findElement(By.cssSelector(classAtr)).getAttribute("innerText")
 			} else {
+				driver.quit()
+				throw ParserDoesntExistException(message)
+			}
+			val price = if (parser.selectedPrice != null) {
+				val priceAtr = '.' + parser.selectedPrice!!.classAtr.replace(' ', '.')
+				stringToDouble(driver.findElement(By.cssSelector(priceAtr)).getAttribute("innerText"))
+			} else {
+				driver.quit()
 				throw ParserDoesntExistException(message)
 			}
 			return ParsedProduct(name = name, price = price)
@@ -182,23 +229,8 @@ class WebParserService(
 				allPrices = parsedProductPrices?.distinct(),
 				storeUrl = host,
 			)
-		} catch (e: IOException) {
-			logger.error("parsing exception: ${e.message}")
-			throw RuntimeException(e.message)
 		} catch (e: Exception) {
-			logger.error("another exception: ${e.message}")
-			throw RuntimeException(e.message)
-		}
-	}
-
-
-	@Throws(ParserDoesntExistException::class)
-	private fun getParserByJSoup(url: String): Parser {
-		try {
-			val document = Jsoup.connect(url).followRedirects(true).timeout(60_000).get()
-			val host = URI(document.location()).host
-			return Parser(storeUrl = host)
-		} catch (e: IOException) {
+//			return getParserBySelenium(parseInfo)
 			logger.error("parsing exception: ${e.message}")
 			throw RuntimeException(e.message)
 		} catch (e: Exception) {
@@ -215,13 +247,67 @@ class WebParserService(
 			.filter(predicate)
 			.map { it.parentNode() }
 			.filter { Objects.nonNull(it) }
-			.filter { it.attributes().hasKey("id") || it.attributes().hasKey("class") }
+			.filter {
+				it.attributes().hasKey("id") || it.attributes().hasKey("class") || it.attributes().hasKey("itemprop")
+			}
 			.toList()
 	}
 
 
-	private fun getBySelenium(url: String, documentElement: String): ParsedProductPrice? {
-		return null
+	private fun getParserBySelenium(parseInfo: ParseInfo): Parser {
+		val driver: WebDriver = FirefoxDriver()
+		driver.manage().timeouts().implicitWaitTimeout
+		driver.get(parseInfo.url)
+//		WebDriverWait(driver, Duration.of(1, ChronoUnit.MINUTES)).until { webDriver: WebDriver ->
+//			(webDriver as JavascriptExecutor).executeScript(
+//				"return document.readyState"
+//			) == "complete"
+//		}
+		Thread.sleep(5_000)
+		val parsedProductNames = if (parseInfo.name != null) {
+			driver.findElements(By.xpath("//*[contains(text(), '${parseInfo.name}')]"))
+				.map {
+					ParsedProductName(
+						value = it.getAttribute("innerText"),
+						idAtr = it.getAttribute("id"),
+						classAtr = it.getAttribute("class"),
+						itemprop = it.getAttribute("itemprop") ?: "",
+					)
+				}
+		} else {
+			null
+		}
+		val parsedProductPrices = if (parseInfo.price != null) {
+			val price = parseInfo.price!!.replace(" ", " ")
+			val map = driver.findElements(By.xpath("//*[contains(text(), '${price}')]"))
+				.map {
+					ParsedProductPrice(
+						strValue = it.getAttribute("innerText"),
+						idAtr = it.getAttribute("id"),
+						classAtr = it.getAttribute("class"),
+						itemprop = it.getAttribute("itemprop") ?: "",
+					)
+				}
+			val map1 = driver.findElements(By.xpath("//*[contains(text(), '${parseInfo.price!!}')]"))
+				.map {
+					ParsedProductPrice(
+						strValue = it.getAttribute("innerText"),
+						idAtr = it.getAttribute("id"),
+						classAtr = it.getAttribute("class"),
+						itemprop = it.getAttribute("itemprop") ?: "",
+					)
+				}
+			map + map1
+		} else {
+			null
+		}
+		val host = URI(parseInfo.url!!).host
+		driver.quit()
+		return Parser(
+			allNames = parsedProductNames,
+			allPrices = parsedProductPrices,
+			storeUrl = host,
+		)
 	}
 
 }

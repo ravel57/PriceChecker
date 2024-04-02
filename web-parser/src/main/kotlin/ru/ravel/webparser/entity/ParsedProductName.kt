@@ -15,5 +15,7 @@ data class ParsedProductName(
 
 	var idAtr: String = "",
 
-	var classAtr: String = ""
+	var classAtr: String = "",
+
+	var itemprop: String = "",
 )

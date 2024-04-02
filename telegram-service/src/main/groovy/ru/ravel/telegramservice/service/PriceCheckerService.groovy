@@ -70,7 +70,7 @@ class PriceCheckerService {
 
 
 	ArrayList<Result> getAllFollowedProducts() {
-		logger.info("")
+		logger.debug("")
 		return ["iPhone 11 Pro", "Samsung S24 Ultra", "Казантип 2009"]
 	}
 
